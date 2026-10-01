@@ -6,6 +6,12 @@ end
 
 (ic::Gauss)(pos::Space{D}) where {D} = ic.a * exp(-sum(abs2, pos - ic.b) / ic.width^2)
 
-function build_ic(::Val{:gauss}, p, D::Int, ::Type{T}) where {T}
-    return Gauss(param2uvec(p[1]), param2xvec(p[2]), Float64(p[3]))
+function build_ic(::Val{:gauss}, conf::Dict, ctx::Dict)
+    T, D, M = ctx[:Type]::DataType, ctx[:D]::Int, ctx[:M]::Int
+    
+    a = State{M, T}(Tuple(T.(conf[:a])))
+    b = Space{D, T}(Tuple(T.(conf[:b])))
+    width = T(conf[:width])
+    
+    return Gauss(a, b, width)
 end

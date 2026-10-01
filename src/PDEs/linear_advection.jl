@@ -36,6 +36,11 @@ end
     return eq.vel[d][k,k]
 end
 
+function build_equation(::Val{:linear}, pde_conf::Dict, context::Dict)
+    rep = parse_representation(pde_conf)
+    return LinearAdvection(pde_conf[:velocities]; rep=rep) 
+end
+
 # ---------------------------------------------------------
 # Analytic Closures
 # ---------------------------------------------------------

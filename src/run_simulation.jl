@@ -47,72 +47,56 @@ end
     return sim_data_result
 end
 
-function build_equation(params::ParamDict, ::Type{T}) where {T}
-    # =========================================================================
-    # SMART BYPASS: Direct Struct Instantiation
-    # =========================================================================
-    if haskey(params, :PDE_params) && params[:PDE_params] isa Tuple && !isempty(params[:PDE_params]) && params[:PDE_params][1] isa HyperbolicPDE
-        eq = params[:PDE_params][1]
-        
-        D = typeof(eq).parameters[1]
-        NM = typeof(eq).parameters[2]
-        vel_var = eq isa EulerEquation ? Tuple(2:D+1) : (1,)
-        
-        return eq, D, NM, vel_var
-    end
+# =========================================================================
+# MODULAR TIME STEPPER BUILDERS
+# =========================================================================
 
-    # =========================================================================
-    # STANDARD FACTORY: String-based Instantiation
-    # =========================================================================
-    eq_name = lowercase(string(params[:PDE]))
-    
-    path_str = lowercase(string(get(params, :PDE_path, "mapped")))
-    path_obj = if path_str == "line"
-        LinePath()
-    elseif path_str == "mapped"
-        MappedPath()
-    elseif path_str == "naive" || path_str == "naiveaverage"
-        NaiveAveragePath()
-    else
-        error("Unknown PDE path: $path_str")
-    end
-    
-    rep_str = lowercase(string(get(params, :PDE_representation, "conservative")))
-    rep = if rep_str == "conservative"
-        Conservative()
-    elseif rep_str == "primitive"
-        Primitive(path_obj)
-    elseif rep_str == "lagrangian" || rep_str == "lagrange"
-        Lagrangian(path_obj)
-    else
-        error("Unknown PDE representation: $rep_str")
-    end
+# --- Tableau Builder ---
+function build_tableau(time_conf::Dict, context::Dict)
+    name = time_conf[:stepper]::Symbol
+    return build_tableau(Val(name), time_conf, context)
+end
 
-    D = haskey(params, :Ns) ? length(params[:Ns]) : 1
-    
-    local eq, NM, vel_var
+build_tableau(name::Val, conf::Dict, ctx::Dict) = error("Unknown Time Stepper Tableau: $(typeof(name))")
 
-    if eq_name == "linear"
-        # Linear Advection automatically deduces T from the provided velocity matrix in its constructor
-        eq = LinearAdvection(params[:PDE_params]; rep=rep) 
-        NM = length(eq.vel[1])
-        vel_var = (1,)
-        
-    elseif eq_name == "burgers"
-        NM = 1
-        vel_var = (1,)
-        eq = BurgersEquation(Val(D), T, rep)
-        
-    elseif eq_name == "euler"
-        NM = D + 2
-        vel_var = Tuple(2:D+1)
-        eq = EulerEquation(Val(D), T, T(GAS_GAMMA_EULER), rep)        
-        
-    else
-        error("PDE '$eq_name' is not implemented.")
-    end
-    
-    return eq, D, NM, vel_var
+# Explicit RK Tableaus
+build_tableau(::Val{:Euler}, conf::Dict, ctx::Dict) = RK1_Euler_Tableau(ctx[:Type])
+build_tableau(::Val{:RK2}, conf::Dict, ctx::Dict)   = RK2_Ralston_Tableau(ctx[:Type])
+build_tableau(::Val{:RK3}, conf::Dict, ctx::Dict)   = RK3_SSP_Tableau(ctx[:Type])
+build_tableau(::Val{:RK4}, conf::Dict, ctx::Dict)   = RK4_Classical_Tableau(ctx[:Type])
+
+# IMEX Tableaus
+build_tableau(::Val{:ARS233}, conf::Dict, ctx::Dict) = IMEX_ARS233_Tableau(ctx[:Type])
+build_tableau(::Val{:PRSSP3}, conf::Dict, ctx::Dict) = IMEX_PRSSP3_Tableau(ctx[:Type])
+build_tableau(::Val{:ARS222}, conf::Dict, ctx::Dict) = IMEX_ARS222_Tableau(ctx[:Type])
+build_tableau(::Val{:SSP332}, conf::Dict, ctx::Dict) = IMEX_SSP2332_Tableau(ctx[:Type])
+build_tableau(::Val{:IMEXEuler}, conf::Dict, ctx::Dict) = IMEX_Euler_Tableau(ctx[:Type])
+
+# --- Main Time Stepper Builder ---
+function build_timestepper(context::Dict)
+    tableau = context[:Tableau]
+    return _build_timestepper(tableau, context)
+end
+
+# Deduce Explicit RK Stepper from the RKButcherTableau
+function _build_timestepper(tableau::RKButcherTableau, context::Dict)
+    return GeneralRKTimeStepper(
+        context[:Equation], 
+        context[:Scheme], 
+        context[:ExplicitSources], 
+        tableau
+    )
+end
+
+# Deduce IMEX Stepper from the IMEXButcherTableau
+function _build_timestepper(tableau::IMEXButcherTableau, context::Dict)
+    return GeneralIMEXTimeStepper(
+        context[:Equation], 
+        context[:Scheme], 
+        context[:ExplicitSources], 
+        context[:ImplicitSources], 
+        tableau
+    )
 end
 
 function build_kinetic_system(params::ParamDict, D::Int, NM::Int, rep::EquationRepresentation, ::Type{T}) where {T}
@@ -184,156 +168,228 @@ function build_spatial_schemes(params::ParamDict, D::Int, M_comps::Int, delta_re
 
     return MainGrad
 end
+
+# =========================================================================
+# MODULAR SPATIAL SCHEME BUILDERS
+# =========================================================================
+
+# --- Flux Builder ---
+function build_flux(flux_conf::Dict, context::Dict)
+    name = flux_conf[:name]::Symbol
+    return build_flux(Val(name), flux_conf, context)
+end
+
+build_flux(name::Val, conf::Dict, context::Dict) = error("Unknown Flux: $(typeof(name))")
+build_flux(::Val{:Rusanov}, conf::Dict, context::Dict) = RusanovFlux()
+build_flux(::Val{:Upwind}, conf::Dict, context::Dict)  = UpwindFlux()
+
+# --- Limiter Builder ---
+function build_limiter(limiter_conf::Dict, context::Dict)
+    name = limiter_conf[:name]::Symbol
+    return build_limiter(Val(name), limiter_conf, context)
+end
+
+build_limiter(name::Val, conf::Dict, context::Dict) = error("Unknown Limiter: $(typeof(name))")
+build_limiter(::Val{:none}, conf::Dict, context::Dict) = NoLimiter()
+
+function build_limiter(::Val{:minmod}, conf::Dict, context::Dict)
+    return MinmodLimiter(conf[:mode]::Symbol)
+end
+function build_limiter(::Val{:superbee}, conf::Dict, context::Dict)
+    return SuperbeeLimiter(conf[:mode]::Symbol)
+end
+function build_limiter(::Val{:VK}, conf::Dict, context::Dict)
+    return VenkatakrishnanLimiter(conf[:mode]::Symbol)
+end
+function build_limiter(::Val{:BJ}, conf::Dict, context::Dict)
+    return BarthJespersenLimiter(conf[:mode]::Symbol)
+end
+
+# --- MOOD Criteria & Strategies ---
+build_mood_criterion(name::Val, conf::Dict, context::Dict) = error("Unknown MOOD criterion: $(typeof(name))")
+build_mood_criterion(::Val{:none}, conf::Dict, context::Dict) = NoMOOD()
+build_mood_criterion(::Val{:only}, conf::Dict, context::Dict) = OnlyMOOD()
+
+function build_mood_criterion(::Val{:U1}, conf::Dict, context::Dict)
+    T = context[:Type]::DataType
+    pg = context[:Grid]
+    
+    vol_dx = prod(pg.meta.dx)
+    delta_relax = vol_dx * T(get(conf, :delta_relax, 0.0))
+    
+    return MOODu1(delta_relax)
+end
+
+function build_mood_criterion(::Val{:U2}, conf::Dict, context::Dict)
+    T = context[:Type]::DataType
+    pg = context[:Grid]
+    
+    vol_dx = prod(pg.meta.dx)
+    delta_relax = vol_dx * T(get(conf, :delta_relax, 0.0))
+    
+    return MOODu2(delta_relax)
+end
+
+build_mood_strategy(name::Val, conf::Dict, context::Dict) = error("Unknown MOOD strategy: $(typeof(name))")
+build_mood_strategy(::Val{:EPD0}, conf::Dict, context::Dict)   = EPD0()
+build_mood_strategy(::Val{:SEPD0}, conf::Dict, context::Dict)  = StrictEPD0()
+build_mood_strategy(::Val{:EPD1}, conf::Dict, context::Dict)   = EPD1()
+build_mood_strategy(::Val{:EPD2}, conf::Dict, context::Dict)   = EPD2()
+
+# --- MOOD Builder ---
+function build_mood(mood_conf::Dict, context::Dict)
+    crit_sym = mood_conf[:criterion]::Symbol
+    strat_sym = mood_conf[:strategy]::Symbol
+    
+    criterion = build_mood_criterion(Val(crit_sym), mood_conf, context)
+    strategy  = build_mood_strategy(Val(strat_sym), mood_conf, context)
+    
+    return MOOD(strategy, criterion)
+end
+
+# --- Main Scheme Builder ---
+function build_scheme(scheme_conf::Dict, context::Dict)
+    name = scheme_conf[:name]::Symbol
+    return build_scheme(Val(name), scheme_conf, context)
+end
+
+build_scheme(name::Val, conf::Dict, context::Dict) = error("Unknown Scheme: $(typeof(name))")
+
+function build_scheme(::Val{:MUSCL}, conf::Dict, context::Dict)
+    # 1. Pull base types and dimension dependencies from the shared context
+    T = context[:Type]::DataType
+    D = context[:D]::Int
+    M = context[:M]::Int
+    
+    # 2. Pull pre-built objects from the context
+    flux = context[:Flux]
+    limiter = context[:Limiter]
+    mood = context[:MOOD]
+    
+    # 3. Pull explicit scheme configurations
+    order = conf[:order]::Int
+    div_order = conf[:MLS_order]::Int
+    
+    return MUSCL(T, D, M, order; div_order = div_order, flux = flux, limiter = limiter, mood = mood)
+end
+
+function build_scheme(::Val{:Upwind}, conf::Dict, context::Dict)
+    T = context[:Type]::DataType
+    D = context[:D]::Int
+    M = context[:M]::Int
+    
+    flux = context[:Flux]
+    order = conf[:order]::Int
+    algType = conf[:upwind_alg_nd]::String 
+    
+    return UpwindDivergence(T, D, M, order; flux = flux, algType = algType)
+end
+
+function build_scheme(::Val{:Central}, conf::Dict, context::Dict)
+    T = context[:Type]::DataType
+    D = context[:D]::Int
+    M = context[:M]::Int
+    order = conf[:order]::Int
+    
+    return CentralDivergence(T, D, M, order)
+end
+
+function build_scheme(::Val{:WENO}, conf::Dict, context::Dict)
+    T = context[:Type]::DataType
+    D = context[:D]::Int
+    M = context[:M]::Int
+    order = conf[:order]::Int
+    
+    return WENO(T, D, M, order)
+end
+# ==============================================================================
+# MAIN SIMULATION ORCHESTRATOR
+# ==============================================================================
 # ==============================================================================
 # MAIN SIMULATION ORCHESTRATOR
 # ==============================================================================
 function run_simulation(params::ParamDict)::Union{AbstractSimData, Nothing}
     @info "--- Running General N-Dimensional Simulation ---"
     
-    T = get(params, :real_type, Float64)
+    # Base extraction mapping directly to Float64 by default
+    T = get(params, :real_type, Float64) 
     
     try
-        if !haskey(params, :timestepper)
-            @warn "Skipping run: 'timestepper' missing."
-            return nothing
-        end
+        # Initialize the global build context
+        context = Dict{Symbol, Any}()
+        context[:Type] = T
         
-        eq_macro, D, NM, vel_var = build_equation(params, T)
-        IC = getInitialCondition(params[:init_func], get(params, :init_params, nothing))
+        # 1. Extract Config Namespaces (Strictly)
+        pde_conf    = extract_namespace(params, :PDE)
+        domain_conf = extract_namespace(params, :Grid) 
+        grid_conf   = extract_namespace(params, :Grid)
+        weight_conf = extract_namespace(params, :Weight)
+        flux_conf   = extract_namespace(params, :Flux)
+        lim_conf    = extract_namespace(params, :Limiter)
+        mood_conf   = extract_namespace(params, :MOOD)
+        scheme_conf = extract_namespace(params, :Scheme)
+        ic_conf     = extract_namespace(params, :IC)
+        time_conf   = extract_namespace(params, :Time)
         
+        # 2. Base Equation & Dimensions
+        eq_macro = build_equation(pde_conf, T)
+        
+        D = typeof(eq_macro).parameters[1]
+        NM = typeof(eq_macro).parameters[2]
+        
+        context[:D] = D
+        context[:M] = NM
+        
+        # vel_var logic for grid movers
+        vel_var = eq_macro isa EulerEquation ? Tuple(2:D+1) : (1,)
+        
+        # 3. Kinetic System Extension
         km, M_comps, eq_kin, source_term = build_kinetic_system(params, D, NM, eq_macro.rep, T)
+        
+        # Update macro components to kinetic components if relaxation is active
+        context[:M] = M_comps
         is_kinetic = !isnothing(eq_kin)
         
-        # 1. Parse Parameters & Catch Serialized Strings from the Database
-        raw_bc = get(params, :bc, Dict{Int, AbstractBoundaryCondition}())
+        # 4. Geometry & Particle Grid Configuration
+        geom = build_domain(domain_conf, D, T)
+        pg = build_particle_grid(grid_conf, weight_conf, geom, D, M_comps, vel_var, T)
+        context[:Grid] = pg
         
-        # If the runner loaded the dictionary as a string, evaluate it back into code
-        if raw_bc isa String
-            raw_bc = eval(Meta.parse(raw_bc))
-        end
+        # 5. Pipeline State Registration
+        context[:Equation] = is_kinetic ? eq_kin : eq_macro
+        context[:ExplicitSources] = () # Empty tuple base for explicit sources
+        context[:ImplicitSources] = is_kinetic ? (source_term,) : ()
         
-        # 2. Universal Boundary Condition Translation
-        bc_map = Dict{Int, AbstractBoundaryCondition}()
+        # 6. Spatial Scheme Pipeline
+        context[:Flux]    = build_flux(flux_conf, context)
+        context[:Limiter] = build_limiter(lim_conf, context)
+        context[:MOOD]    = build_mood(mood_conf, context)
+        context[:Scheme]  = build_scheme(scheme_conf, context)
         
-        for (tag, bc_obj) in raw_bc
-            if bc_obj isa AbstractBoundaryCondition
-                # Structs passed directly (New Method)
-                bc_map[tag] = bc_obj
-            else
-                # Symbols or Strings passed (Backwards Compatibility)
-                bc_sym = Symbol(bc_obj)
-                if bc_sym === :outflow || bc_sym === :OutflowBC
-                    bc_map[tag] = OutflowBC()
-                elseif bc_sym === :fixed_dirichlet || bc_sym === :FixedDirichlet
-                    bc_map[tag] = FixedDirichlet()
-                else
-                    # Dynamic Custom Struct Fallback
-                    if isdefined(Main, bc_sym)
-                        bc_map[tag] = getfield(Main, bc_sym)()
-                    elseif isdefined(@__MODULE__, bc_sym)
-                        bc_map[tag] = getfield(@__MODULE__, bc_sym)()
-                    else
-                        error("Boundary Condition '$bc_sym' could not be found.")
-                    end
-                end
-            end
-        end
+        # 7. Time Stepper Pipeline
+        context[:Tableau] = build_tableau(time_conf, context)
+        method = build_timestepper(context)
         
-        # 2. Geometry Resolution (String Dispatch OR Custom Struct)
-        domain_input = get(params, :domain, "rectangular")
-        local geom
-        
-        if typeof(domain_input) <: String || typeof(domain_input) <: Symbol
-            shape = lowercase(string(domain_input))
-            # Only require :mins and :maxs if building a default shape from scratch
-            req_mins = T.(params[:mins]::Tuple)
-            req_maxs = T.(params[:maxs]::Tuple)
-            
-            if shape == "rectangular"
-                geom = get_rectangular_domain(T, req_mins, req_maxs; bc_map = bc_map)
-            elseif shape == "spherical"
-                center = ntuple(d -> (req_mins[d] + req_maxs[d]) / 2.0, Val(D))
-                radius = (req_maxs[1] - req_mins[1]) / 2.0
-                geom = get_spherical_domain(T, center, radius; bc_map = bc_map)
-            else
-                error("Unknown built-in domain shape: $shape")
-            end
+        # 8. Initial Condition Setup
+        ic_conf = extract_namespace(params, :IC)
+        IC = build_initial_condition(ic_conf, context)
+        if is_kinetic
+            setInitialConditions!(pg, source_term, IC, eq_macro)
         else
-            # The user provided a fully instantiated AbstractGeometricDomain directly!
-            geom = domain_input
+            setInitialConditions!(pg, eq_macro, IC)
         end
         
-        # 3. Dynamically extract bounds from the resolved geometry
+        # 9. Time Constraints & Limits
+        is_cfl = haskey(time_conf, :CFL)
+        dt = is_cfl ? T(time_conf[:CFL]) : T(time_conf[:dt])
+        
         geom_mins = Tuple(geom.mins)
         geom_maxs = Tuple(geom.maxs)
         
-        Ns = params[:Ns]::Tuple
-        rf = get(params, :randomness_factor, ntuple(_ -> 0.0, D))
-        
-        # Calculate numerical grid properties based on the geometry's physical bounds
-        dxs = ntuple(d -> (T(geom_maxs[d]) - T(geom_mins[d])) / Int(Ns[d]), Val(D))
-        max_dx = maximum(dxs)
-        vol_dx = prod(dxs)
-        randomness = ntuple(d -> T(rf[d]) * dxs[d], Val(D))
-        nominal_dx = dxs
-        
-        # 4. Enforce mandatory numerical parameters
-        if !haskey(params, :interp_range)
-            error("The ':interp_range' parameter is required for meshfree interpolation.")
-        end
-        interp_range_factor = params[:interp_range]
-        interp_alpha = get(params, :interp_alpha, T(1.0))
-        rng = MersenneTwister(params[:SEED])
-        
-        interp_range = T(interp_range_factor) * max_dx
-        delta_relax = vol_dx * T(get(params, :delta_relax, 0.0))
-        weight_func = ExponentialWeightFunction(T(interp_alpha), interp_range)
-        
-        mover_name = string(get(params, :grid_mover, "none"))
-        grid_mover = if mover_name == "physical"; PhysicalGridMover{D}(vel_var)
-                     elseif mover_name == "custom"; CustomGridMover(params[:grid_mover_func], params[:grid_mover_params])
-                     else; NoGridMover() end
-                     
-        is_per_input = get(params, :periodic, false)
-
-        # 5. Construct the Particle Grid
-        pg = ParticleGrid(
-            geom, nominal_dx, interp_range_factor;
-            is_periodic = is_per_input,
-            randomness = randomness,
-            rng = rng,
-            M = M_comps,
-            weight_func = weight_func,
-            mover = grid_mover
-        )
-
-        MainGrad = build_spatial_schemes(params, D, M_comps, delta_relax, T)
-
-        cfl = get(params, :CFL, nothing)
-        is_cfl = !isnothing(cfl)
-        dt = is_cfl ? T(cfl) : T(params[:dt])
-        ts_name = string(params[:timestepper])
-
+        # 10. Time Integration & Execution
         if !is_kinetic
-            method = if ts_name == "Euler"; GeneralRKTimeStepper(eq_macro, MainGrad, RK1_Euler_Tableau(T))
-                     elseif ts_name == "RK2"; GeneralRKTimeStepper(eq_macro, MainGrad, RK2_Ralston_Tableau(T))
-                     elseif ts_name == "RK3"; GeneralRKTimeStepper(eq_macro, MainGrad, RK3_SSP_Tableau(T))
-                     elseif ts_name == "RK4"; GeneralRKTimeStepper(eq_macro, MainGrad, RK4_Classical_Tableau(T))
-                     else; error("Unknown Explicit TimeStepper: '$ts_name'") end
-            
-            setInitialConditions!(pg, eq_macro, IC)
             return _execute_explicit_sim!(method, eq_macro, pg, dt, is_cfl, params, D, params[:snapshots], get(params, :remove_ghosts, true), M_comps, geom_mins, geom_maxs, T)
-            
         else
-            implicit_solver = LinearizedRelaxationImplicitSolver()
-            method = if ts_name == "ARS233"; GeneralIMEXTimeStepper(eq_macro, MainGrad, implicit_solver, source_term, IMEX_ARS233_Tableau(T))
-                     elseif ts_name == "PRSSP3"; GeneralIMEXTimeStepper(eq_macro, MainGrad, implicit_solver, source_term, IMEX_PRSSP3_Tableau(T))
-                     elseif ts_name == "ARS222"; GeneralIMEXTimeStepper(eq_macro, MainGrad, implicit_solver, source_term, IMEX_ARS222_Tableau(T))
-                     elseif ts_name == "SSP332"; GeneralIMEXTimeStepper(eq_macro, MainGrad, implicit_solver, source_term, IMEX_SSP2332_Tableau(T))
-                     elseif ts_name == "IMEXEuler"; GeneralIMEXTimeStepper(eq_macro, MainGrad, implicit_solver, source_term, IMEX_Euler_Tableau(T))
-                     else; error("Unknown IMEX TimeStepper: '$ts_name'") end
-            
-            setInitialConditions!(pg, source_term, IC, eq_macro)
             return _execute_kinetic_sim!(method, eq_kin, pg, dt, is_cfl, params, D, params[:snapshots], get(params, :remove_ghosts, true), get(params, :save_relax, false), km, geom_mins, geom_maxs, T)
         end
 
@@ -402,51 +458,150 @@ function build_geometric_domain(params::ParamDict, D::Int, ::Type{T}) where {T}
     end
 end
 
+# =========================================================================
+# MODULAR WEIGHT BUILDER
+# =========================================================================
 
-function build_particle_grid(params::ParamDict, D::Int, M_comps::Int, vel_var::Tuple, ::Type{T}) where {T}
-    # 1. Geometry Resolution (Delegates BC and Periodicity parsing)
-    geom = build_geometric_domain(params, D, T)
+function build_weights(weight_conf::Dict, max_dx::T, ::Type{T}) where {T}
+    if !haskey(weight_conf, :name)
+        error("Weight configuration must include a strictly typed :name Symbol (e.g., :exponential, :inverse).")
+    end
+    if !haskey(weight_conf, :range)
+        error("Weight configuration must include a strictly typed :range parameter for the interpolation scaling factor.")
+    end
+    
+    weight_name = weight_conf[:name]::Symbol
+    
+    # Compute the absolute interpolation range directly in the weight builder
+    interp_range = T(weight_conf[:range]) * max_dx
+    
+    return build_weights(Val(weight_name), weight_conf, interp_range, T)
+end
+
+# Generic fallback
+build_weights(name::Val, weight_conf::Dict, interp_range::T, ::Type{T}) where {T} = error("Unknown weight function: $(typeof(name))")
+
+# --- Specific Weight Builders ---
+function build_weights(::Val{:exponential}, weight_conf::Dict, interp_range::T, ::Type{T}) where {T}
+    # Explicitly require alpha (no defaults!)
+    alpha = T(weight_conf[:alpha])
+    return ExponentialWeightFunction(alpha, interp_range)
+end
+
+# Example for future extensibility (e.g., Splines)
+function build_weights(::Val{:cubic_spline}, weight_conf::Dict, interp_range::T, ::Type{T}) where {T}
+    return CubicSplineWeightFunction(interp_range)
+end
+
+function build_weights(::Val{:constant}, weight_conf::Dict, interp_range::T, ::Type{T}) where {T}
+    return ConstantWeightFunction(interp_range)
+end
+
+# =========================================================================
+# MODULAR PDE BUILDERS
+# =========================================================================
+
+# --- Path Parsing ---
+function parse_path(pde_conf::Dict)
+    path_sym = get(pde_conf, :path, :mapped)::Symbol
+    return parse_path(Val(path_sym), pde_conf)
+end
+
+parse_path(::Val{:line}, pde_conf::Dict) = LinePath()
+parse_path(::Val{:mapped}, pde_conf::Dict) = MappedPath()
+parse_path(::Val{:naive}, pde_conf::Dict) = NaiveAveragePath()
+parse_path(::Val{:naiveaverage}, pde_conf::Dict) = NaiveAveragePath()
+parse_path(path_val::Val, pde_conf::Dict) = error("Unknown PDE path: $(typeof(path_val))")
+
+
+# --- Representation Parsing ---
+function parse_representation(pde_conf::Dict)
+    rep_sym = get(pde_conf, :representation, :conservative)::Symbol
+    return parse_representation(Val(rep_sym), pde_conf)
+end
+
+parse_representation(::Val{:conservative}, pde_conf::Dict) = Conservative()
+parse_representation(::Val{:primitive}, pde_conf::Dict) = Primitive(parse_path(pde_conf))
+parse_representation(::Val{:lagrangian}, pde_conf::Dict) = Lagrangian(parse_path(pde_conf))
+parse_representation(::Val{:lagrange}, pde_conf::Dict) = Lagrangian(parse_path(pde_conf))
+parse_representation(rep_val::Val, pde_conf::Dict) = error("Unknown PDE representation: $(typeof(rep_val))")
+
+
+# --- Main Equation Builder ---
+function build_equation(pde_conf::Dict, ::Type{T}) where {T}
+    if !haskey(pde_conf, :name)
+        error("PDE configuration must include a strictly typed :name Symbol (e.g., :linear, :burgers).")
+    end
+    
+    eq_name = pde_conf[:name]::Symbol
+    return build_equation(Val(eq_name), pde_conf, T)
+end
+
+# Generic fallback
+build_equation(eq_name::Val, pde_conf::Dict, ::Type{T}) where {T} = error("PDE '$(typeof(eq_name))' is not implemented.")
+
+# --- Specific PDE Builders ---
+function build_equation(::Val{:linear}, pde_conf::Dict, ::Type{T}) where {T}
+    rep = parse_representation(pde_conf)
+    # D is implicitly defined by the length of the velocities tuple in the constructor
+    return LinearAdvection(pde_conf[:velocities]; rep=rep) 
+end
+
+function build_equation(::Val{:burgers}, pde_conf::Dict, ::Type{T}) where {T}
+    rep = parse_representation(pde_conf)
+    D = pde_conf[:D]::Int
+    
+    return BurgersEquation(Val(D), T, rep)
+end
+
+function build_equation(::Val{:euler}, pde_conf::Dict, ::Type{T}) where {T}
+    rep = parse_representation(pde_conf)
+    D = pde_conf[:D]::Int
+    
+    gamma = T(get(pde_conf, :gamma, GAS_GAMMA_EULER)) 
+    
+    return EulerEquation(Val(D), T, gamma, rep)
+end
+
+# =========================================================================
+# INTERNAL PARTICLE GRID GENERATOR
+# =========================================================================
+
+function build_particle_grid(grid_conf::Dict, context::Dict)
+    # 1. Pull required dependencies from the context
+    T = context[:Type]::DataType
+    D = context[:D]::Int
+    M = context[:M]::Int
+    geom = context[:Domain]
     
     geom_mins = Tuple(geom.mins)
     geom_maxs = Tuple(geom.maxs)
     
     # 2. Dynamically extract bounds from the resolved geometry
-    Ns = params[:Ns]::Tuple
-    rf = get(params, :randomness_factor, ntuple(_ -> 0.0, D))
+    Ns = grid_conf[:Ns]::Tuple
+    rf_tuple = grid_conf[:randomness_factor]::Tuple
     
     dxs = ntuple(d -> (T(geom_maxs[d]) - T(geom_mins[d])) / Int(Ns[d]), Val(D))
     max_dx = maximum(dxs)
-    vol_dx = prod(dxs)
-    randomness = ntuple(d -> T(rf[d]) * dxs[d], Val(D))
     nominal_dx = dxs
+    randomness = ntuple(d -> T(rf_tuple[d]) * dxs[d], Val(D))
     
-    # 3. Enforce mandatory numerical parameters
-    if !haskey(params, :interp_range)
-        error("The ':interp_range' parameter is required for meshfree interpolation.")
-    end
+    # 3. Save max_dx into the context so the weight builder (and others) can access it
+    context[:max_dx] = max_dx
     
-    interp_range_factor = params[:interp_range]
-    interp_alpha = get(params, :interp_alpha, T(1.0))
-    rng = MersenneTwister(params[:SEED])
+    # 4. Instantiate the MLS Weight Function using the unified API
+    weight_conf = context[:WeightConf]::Dict
+    weight_func = build_weights(weight_conf, context)
     
-    interp_range = T(interp_range_factor) * max_dx
-    delta_relax = vol_dx * T(get(params, :delta_relax, 0.0))
-    weight_func = ExponentialWeightFunction(T(interp_alpha), interp_range)
-    
-    mover_name = string(get(params, :grid_mover, "none"))
-    grid_mover = if mover_name == "physical"; PhysicalGridMover{D}(vel_var)
-                 elseif mover_name == "custom"; CustomGridMover(params[:grid_mover_func], params[:grid_mover_params])
-                 else; NoGridMover() end
+    # Strict SEED extraction
+    rng = MersenneTwister(grid_conf[:SEED]::Int)
 
-    # 4. Construct the Particle Grid (Periodicity is now strictly handled inside `geom`)
+    # 5. Construct the Particle Grid
     pg = ParticleGrid(
-        geom, nominal_dx, interp_range_factor;
+        geom, nominal_dx, weight_func, M;
         randomness = randomness,
         rng = rng,
-        M = M_comps,
-        weight_func = weight_func,
-        mover = grid_mover
     )
     
-    return pg, delta_relax, geom_mins, geom_maxs
+    return pg
 end

@@ -11,16 +11,16 @@ function (ic::SRiemann)(pos::Space{D}) where {D}
     return @. 0.5 * (ic.uL + ic.uR) - (ic.uL - ic.uR) / pi * atan(dist / ic.width)
 end
 
-function build_ic(::Val{:s_riemann}, p, D::Int, ::Type{T}) where {T}
-    uL = param2uvec(p[1])
-    uR = param2uvec(p[2])
-    p0 = param2xvec(p[3])
+function build_ic(::Val{:s_riemann}, conf::Dict, ctx::Dict)
+    T, D, M = ctx[:Type]::DataType, ctx[:D]::Int, ctx[:M]::Int
     
-    if length(p) == 4
-        n = SVector{length(p0), Float64}(ntuple(i -> i==1 ? 1.0 : 0.0, length(p0)))
-        return SRiemann(uL, uR, p0, n, Float64(p[4]))
-    else
-        n = normalize(param2xvec(p[4]))
-        return SRiemann(uL, uR, p0, n, Float64(p[5]))
-    end
+    uL = State{M, T}(Tuple(T.(conf[:uL])))
+    uR = State{M, T}(Tuple(T.(conf[:uR])))
+    p0 = Space{D, T}(Tuple(T.(conf[:p0])))
+    width = T(conf[:width])
+    
+    n_tup = get(conf, :n, ntuple(i -> i == 1 ? 1.0 : 0.0, D))
+    n = normalize(Space{D, T}(Tuple(T.(n_tup))))
+    
+    return SRiemann(uL, uR, p0, n, width)
 end

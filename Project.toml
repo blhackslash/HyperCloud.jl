@@ -1,0 +1,8 @@
+[deps]
+HyperCloudCore = "61b85536-db47-4754-9d50-4ccb1001a5ed"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+PDEStudioCore = "93766fa7-4b93-4712-aa47-391c0d405e89"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+
+[sources]
+HyperCloudCore = {path = "../HyperCloudCore.jl"}
