@@ -27,19 +27,12 @@ function build_equation(pde_conf::Dict, context::Dict)
     end
     
     eq_name = pde_conf[:name]::Symbol
-    return _build_equation(Val(eq_name), pde_conf, context)
+    return build_equation(Val(eq_name), pde_conf, context)
 end
 
 # Generic fallback
-_build_equation(eq_name::Val, pde_conf::Dict, context::Dict) = error("PDE '$(typeof(eq_name))' is not implemented.")
+build_equation(eq_name::Val, pde_conf::Dict, context::Dict) = error("PDE '$(typeof(eq_name))' is not implemented.")
 
-"""
-    generate_analytical_solution(shared_params::ParamDict)
-
-Reads the shared simulation parameters, constructs the corresponding InitialCondition
-struct, and returns a fast, standalone closure `exact_u(st)` that evaluates the 
-exact analytical solution using a unified spacetime tensor.
-"""
 """
     analytical_solution(shared_params::ParamDict)
 
@@ -73,3 +66,7 @@ end
 
 # Generic fallback
 analytic_closure(eq::HyperbolicPDE, ic::InitialCondition, params::ParamDict) = @warn "No Analytical Solution implemented for $(typeof(eq)) with $(typeof(ic))!"
+
+include("burgers.jl")
+include("linear_advection.jl")
+include("euler.jl")

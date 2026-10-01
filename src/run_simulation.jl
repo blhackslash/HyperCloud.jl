@@ -1,16 +1,39 @@
-using Random
-using LinearAlgebra
-using StaticArrays
+export run_simulation
+
 
 # ==============================================================================
 # EXECUTION BARRIERS
 # ==============================================================================
+"""
+    extract_namespace(params::Dict, prefix::Symbol; separator::String="_")
+
+Extracts keys starting with `prefix` followed by `separator`. 
+Leaves the values exactly as they are (preserving tuples for hashing).
+Example: `:PDE_velocities` becomes `:velocities`.
+"""
+function extract_namespace(params::Dict, prefix::Symbol; separator::String="_")
+    prefix_str = string(prefix) * separator
+    len = length(prefix_str)
+    
+    extracted = Dict{Symbol, Any}()
+    
+    for (k, v) in params
+        k_str = string(k)
+        if startswith(k_str, prefix_str)
+            # Slice off the prefix and keep the rest of the parameter name
+            new_key = Symbol(k_str[len+1:end])
+            extracted[new_key] = v
+        end
+    end
+    
+    return extracted
+end
 
 @inline _unwrap(v::SVector{1, T}) where {T} = v[1]
 @inline _unwrap(v) = v
 
 @noinline function _execute_explicit_sim!(method, eq, pg, dt, is_cfl, run_params, dimension, snapshots, remove_ghosts, M_components, xmins, xmaxs, ::Type{T}) where {T}
-    xs_svector, us_svector, ts_full, k_step, elapsed_time = mainTimeIntegrator!(method, eq, pg, run_params[:tmax], dt; is_cfl = is_cfl, snapshots = snapshots, remove_ghosts = remove_ghosts, show_progress = _PROGRESS_BAR[], progress_interval = _PROGRESS_INTERVAL[])
+    xs_svector, us_svector, ts_full, k_step, elapsed_time = solve_equation(method, eq, pg, run_params[:tmax], dt; is_cfl = is_cfl, snapshots = snapshots, remove_ghosts = remove_ghosts, show_progress = _PROGRESS_BAR[], progress_interval = _PROGRESS_INTERVAL[])
     @info "Explicit Simulation (D=$dimension) finished in $(round(elapsed_time, digits=2)) seconds."
 
     valid_indices = findall(i -> isassigned(us_svector, i), 1:length(us_svector))
@@ -27,7 +50,7 @@ using StaticArrays
 end
 
 @noinline function _execute_kinetic_sim!(system_method, eq_kin, pg, dt, is_cfl, run_params, dimension, snapshots, remove_ghosts, save_relax, km, xmins, xmaxs, ::Type{T}) where {T}
-    xs_svector, us_svector, ts_full, k_step, elapsed_time = mainTimeIntegrator!(system_method, eq_kin, pg, run_params[:tmax], dt; is_cfl = is_cfl, snapshots = snapshots, remove_ghosts = remove_ghosts, show_progress = _PROGRESS_BAR[], progress_interval = _PROGRESS_INTERVAL[])
+    xs_svector, us_svector, ts_full, k_step, elapsed_time = solve_equation(system_method, eq_kin, pg, run_params[:tmax], dt; is_cfl = is_cfl, snapshots = snapshots, remove_ghosts = remove_ghosts, show_progress = _PROGRESS_BAR[], progress_interval = _PROGRESS_INTERVAL[])
     @info "Kinetic Relaxation Simulation (D=$dimension) finished in $(round(elapsed_time, digits=2)) seconds."
 
     valid_indices = findall(i -> isassigned(us_svector, i), 1:length(us_svector))
@@ -99,27 +122,40 @@ function _build_timestepper(tableau::IMEXButcherTableau, context::Dict)
     )
 end
 
-function build_kinetic_system(params::ParamDict, D::Int, NM::Int, rep::EquationRepresentation, ::Type{T}) where {T}
-    relax_config = get(params, :relax_velocities, nothing)
+# =========================================================================
+# KINETIC SYSTEM BUILDER
+# =========================================================================
+
+function build_kinetic_system(kin_conf::Dict, context::Dict)
+    T = context[:Type]::DataType
+    D = context[:D]::Int
+    NM = context[:M]::Int
+    eq_macro = context[:Equation]
     
-    if isnothing(relax_config)
+    # Check if kinetic relaxation is active
+    if !haskey(kin_conf, :velocities)
         km = Kin2Macro(collect(1:(NM + 1)))
-        return km, NM, nothing, NoSourceTerm()
+        return km, NM, nothing, nothing
     end
     
-    relax_eps::T = T(params[:relax_epsilon])
-    relax_indices = params[:relax_indices]
+    relax_config = kin_conf[:velocities]::Tuple
+    relax_eps = T(kin_conf[:epsilon])
+    relax_indices = kin_conf[:indices]::Vector{Int}
+    
     km = Kin2Macro(relax_indices)
     
-    NK = length(relax_config[1])
-    eq_kin = LinearAdvection(relax_config)
+    # eq_kin uses LinearAdvection (which safely triggers param2vel internally!)
+    eq_kin = LinearAdvection(relax_config, T)
+    
+    # Extract exact number of kinetic components from the constructed PDE
+    NK = typeof(eq_kin).parameters[2] 
     
     coeffs = State{NM, T}(ntuple(m -> one(T) / T(relax_indices[m+1] - relax_indices[m]), Val(NM)))
-    int_factor = T(D) 
+    interior_factor = T(get(kin_conf, :interior_factor, D)) 
     
-    source_term = rep isa Conservative ? 
-        RelaxationSourceTerm(km, relax_eps, coeffs, eq_kin, int_factor) :
-        NonLocalRelaxationSourceTerm(km, relax_eps, coeffs, eq_kin, int_factor)
+    source_term = eq_macro.rep isa Conservative ? 
+        RelaxationSourceTerm(km, relax_eps, coeffs, eq_macro, eq_kin, interior_factor) :
+        NonLocalRelaxationSourceTerm(km, relax_eps, coeffs, eq_macro, eq_kin, interior_factor)
         
     return km, NK, eq_kin, source_term
 end
@@ -173,138 +209,6 @@ end
 # MODULAR SPATIAL SCHEME BUILDERS
 # =========================================================================
 
-# --- Flux Builder ---
-function build_flux(flux_conf::Dict, context::Dict)
-    name = flux_conf[:name]::Symbol
-    return build_flux(Val(name), flux_conf, context)
-end
-
-build_flux(name::Val, conf::Dict, context::Dict) = error("Unknown Flux: $(typeof(name))")
-build_flux(::Val{:Rusanov}, conf::Dict, context::Dict) = RusanovFlux()
-build_flux(::Val{:Upwind}, conf::Dict, context::Dict)  = UpwindFlux()
-
-# --- Limiter Builder ---
-function build_limiter(limiter_conf::Dict, context::Dict)
-    name = limiter_conf[:name]::Symbol
-    return build_limiter(Val(name), limiter_conf, context)
-end
-
-build_limiter(name::Val, conf::Dict, context::Dict) = error("Unknown Limiter: $(typeof(name))")
-build_limiter(::Val{:none}, conf::Dict, context::Dict) = NoLimiter()
-
-function build_limiter(::Val{:minmod}, conf::Dict, context::Dict)
-    return MinmodLimiter(conf[:mode]::Symbol)
-end
-function build_limiter(::Val{:superbee}, conf::Dict, context::Dict)
-    return SuperbeeLimiter(conf[:mode]::Symbol)
-end
-function build_limiter(::Val{:VK}, conf::Dict, context::Dict)
-    return VenkatakrishnanLimiter(conf[:mode]::Symbol)
-end
-function build_limiter(::Val{:BJ}, conf::Dict, context::Dict)
-    return BarthJespersenLimiter(conf[:mode]::Symbol)
-end
-
-# --- MOOD Criteria & Strategies ---
-build_mood_criterion(name::Val, conf::Dict, context::Dict) = error("Unknown MOOD criterion: $(typeof(name))")
-build_mood_criterion(::Val{:none}, conf::Dict, context::Dict) = NoMOOD()
-build_mood_criterion(::Val{:only}, conf::Dict, context::Dict) = OnlyMOOD()
-
-function build_mood_criterion(::Val{:U1}, conf::Dict, context::Dict)
-    T = context[:Type]::DataType
-    pg = context[:Grid]
-    
-    vol_dx = prod(pg.meta.dx)
-    delta_relax = vol_dx * T(get(conf, :delta_relax, 0.0))
-    
-    return MOODu1(delta_relax)
-end
-
-function build_mood_criterion(::Val{:U2}, conf::Dict, context::Dict)
-    T = context[:Type]::DataType
-    pg = context[:Grid]
-    
-    vol_dx = prod(pg.meta.dx)
-    delta_relax = vol_dx * T(get(conf, :delta_relax, 0.0))
-    
-    return MOODu2(delta_relax)
-end
-
-build_mood_strategy(name::Val, conf::Dict, context::Dict) = error("Unknown MOOD strategy: $(typeof(name))")
-build_mood_strategy(::Val{:EPD0}, conf::Dict, context::Dict)   = EPD0()
-build_mood_strategy(::Val{:SEPD0}, conf::Dict, context::Dict)  = StrictEPD0()
-build_mood_strategy(::Val{:EPD1}, conf::Dict, context::Dict)   = EPD1()
-build_mood_strategy(::Val{:EPD2}, conf::Dict, context::Dict)   = EPD2()
-
-# --- MOOD Builder ---
-function build_mood(mood_conf::Dict, context::Dict)
-    crit_sym = mood_conf[:criterion]::Symbol
-    strat_sym = mood_conf[:strategy]::Symbol
-    
-    criterion = build_mood_criterion(Val(crit_sym), mood_conf, context)
-    strategy  = build_mood_strategy(Val(strat_sym), mood_conf, context)
-    
-    return MOOD(strategy, criterion)
-end
-
-# --- Main Scheme Builder ---
-function build_scheme(scheme_conf::Dict, context::Dict)
-    name = scheme_conf[:name]::Symbol
-    return build_scheme(Val(name), scheme_conf, context)
-end
-
-build_scheme(name::Val, conf::Dict, context::Dict) = error("Unknown Scheme: $(typeof(name))")
-
-function build_scheme(::Val{:MUSCL}, conf::Dict, context::Dict)
-    # 1. Pull base types and dimension dependencies from the shared context
-    T = context[:Type]::DataType
-    D = context[:D]::Int
-    M = context[:M]::Int
-    
-    # 2. Pull pre-built objects from the context
-    flux = context[:Flux]
-    limiter = context[:Limiter]
-    mood = context[:MOOD]
-    
-    # 3. Pull explicit scheme configurations
-    order = conf[:order]::Int
-    div_order = conf[:MLS_order]::Int
-    
-    return MUSCL(T, D, M, order; div_order = div_order, flux = flux, limiter = limiter, mood = mood)
-end
-
-function build_scheme(::Val{:Upwind}, conf::Dict, context::Dict)
-    T = context[:Type]::DataType
-    D = context[:D]::Int
-    M = context[:M]::Int
-    
-    flux = context[:Flux]
-    order = conf[:order]::Int
-    algType = conf[:upwind_alg_nd]::String 
-    
-    return UpwindDivergence(T, D, M, order; flux = flux, algType = algType)
-end
-
-function build_scheme(::Val{:Central}, conf::Dict, context::Dict)
-    T = context[:Type]::DataType
-    D = context[:D]::Int
-    M = context[:M]::Int
-    order = conf[:order]::Int
-    
-    return CentralDivergence(T, D, M, order)
-end
-
-function build_scheme(::Val{:WENO}, conf::Dict, context::Dict)
-    T = context[:Type]::DataType
-    D = context[:D]::Int
-    M = context[:M]::Int
-    order = conf[:order]::Int
-    
-    return WENO(T, D, M, order)
-end
-# ==============================================================================
-# MAIN SIMULATION ORCHESTRATOR
-# ==============================================================================
 # ==============================================================================
 # MAIN SIMULATION ORCHESTRATOR
 # ==============================================================================
@@ -332,7 +236,7 @@ function run_simulation(params::ParamDict)::Union{AbstractSimData, Nothing}
         time_conf   = extract_namespace(params, :Time)
         
         # 2. Base Equation & Dimensions
-        eq_macro = build_equation(pde_conf, T)
+        eq_macro = build_equation(pde_conf, context)
         
         D = typeof(eq_macro).parameters[1]
         NM = typeof(eq_macro).parameters[2]
@@ -344,21 +248,25 @@ function run_simulation(params::ParamDict)::Union{AbstractSimData, Nothing}
         vel_var = eq_macro isa EulerEquation ? Tuple(2:D+1) : (1,)
         
         # 3. Kinetic System Extension
-        km, M_comps, eq_kin, source_term = build_kinetic_system(params, D, NM, eq_macro.rep, T)
+        #km, M_comps, eq_kin, source_term = build_kinetic_system(params, D, NM, eq_macro.rep, T)
         
         # Update macro components to kinetic components if relaxation is active
-        context[:M] = M_comps
-        is_kinetic = !isnothing(eq_kin)
+        #context[:M] = M_comps
+        #is_kinetic = !isnothing(eq_kin)
+        is_kinetic = false
         
         # 4. Geometry & Particle Grid Configuration
-        geom = build_domain(domain_conf, D, T)
-        pg = build_particle_grid(grid_conf, weight_conf, geom, D, M_comps, vel_var, T)
+        geom = build_domain(domain_conf, context)
+        context[:Domain] = geom
+        context[:WeightConf] = weight_conf
+        
+        pg = build_particle_grid(grid_conf, context)
         context[:Grid] = pg
         
         # 5. Pipeline State Registration
         context[:Equation] = is_kinetic ? eq_kin : eq_macro
         context[:ExplicitSources] = () # Empty tuple base for explicit sources
-        context[:ImplicitSources] = is_kinetic ? (source_term,) : ()
+        #context[:ImplicitSources] = is_kinetic ? (source_term,) : ()
         
         # 6. Spatial Scheme Pipeline
         context[:Flux]    = build_flux(flux_conf, context)
@@ -372,7 +280,7 @@ function run_simulation(params::ParamDict)::Union{AbstractSimData, Nothing}
         
         # 8. Initial Condition Setup
         ic_conf = extract_namespace(params, :IC)
-        IC = build_initial_condition(ic_conf, context)
+        IC = build_ic(ic_conf, context)
         if is_kinetic
             setInitialConditions!(pg, source_term, IC, eq_macro)
         else
@@ -388,7 +296,7 @@ function run_simulation(params::ParamDict)::Union{AbstractSimData, Nothing}
         
         # 10. Time Integration & Execution
         if !is_kinetic
-            return _execute_explicit_sim!(method, eq_macro, pg, dt, is_cfl, params, D, params[:snapshots], get(params, :remove_ghosts, true), M_comps, geom_mins, geom_maxs, T)
+            return _execute_explicit_sim!(method, eq_macro, pg, dt, is_cfl, params, D, params[:snapshots], get(params, :remove_ghosts, true), NM, geom_mins, geom_maxs, T)
         else
             return _execute_kinetic_sim!(method, eq_kin, pg, dt, is_cfl, params, D, params[:snapshots], get(params, :remove_ghosts, true), get(params, :save_relax, false), km, geom_mins, geom_maxs, T)
         end
@@ -456,111 +364,6 @@ function build_geometric_domain(params::ParamDict, D::Int, ::Type{T}) where {T}
         # Return the directly provided GeometricDomain instance
         return domain_input
     end
-end
-
-# =========================================================================
-# MODULAR WEIGHT BUILDER
-# =========================================================================
-
-function build_weights(weight_conf::Dict, max_dx::T, ::Type{T}) where {T}
-    if !haskey(weight_conf, :name)
-        error("Weight configuration must include a strictly typed :name Symbol (e.g., :exponential, :inverse).")
-    end
-    if !haskey(weight_conf, :range)
-        error("Weight configuration must include a strictly typed :range parameter for the interpolation scaling factor.")
-    end
-    
-    weight_name = weight_conf[:name]::Symbol
-    
-    # Compute the absolute interpolation range directly in the weight builder
-    interp_range = T(weight_conf[:range]) * max_dx
-    
-    return build_weights(Val(weight_name), weight_conf, interp_range, T)
-end
-
-# Generic fallback
-build_weights(name::Val, weight_conf::Dict, interp_range::T, ::Type{T}) where {T} = error("Unknown weight function: $(typeof(name))")
-
-# --- Specific Weight Builders ---
-function build_weights(::Val{:exponential}, weight_conf::Dict, interp_range::T, ::Type{T}) where {T}
-    # Explicitly require alpha (no defaults!)
-    alpha = T(weight_conf[:alpha])
-    return ExponentialWeightFunction(alpha, interp_range)
-end
-
-# Example for future extensibility (e.g., Splines)
-function build_weights(::Val{:cubic_spline}, weight_conf::Dict, interp_range::T, ::Type{T}) where {T}
-    return CubicSplineWeightFunction(interp_range)
-end
-
-function build_weights(::Val{:constant}, weight_conf::Dict, interp_range::T, ::Type{T}) where {T}
-    return ConstantWeightFunction(interp_range)
-end
-
-# =========================================================================
-# MODULAR PDE BUILDERS
-# =========================================================================
-
-# --- Path Parsing ---
-function parse_path(pde_conf::Dict)
-    path_sym = get(pde_conf, :path, :mapped)::Symbol
-    return parse_path(Val(path_sym), pde_conf)
-end
-
-parse_path(::Val{:line}, pde_conf::Dict) = LinePath()
-parse_path(::Val{:mapped}, pde_conf::Dict) = MappedPath()
-parse_path(::Val{:naive}, pde_conf::Dict) = NaiveAveragePath()
-parse_path(::Val{:naiveaverage}, pde_conf::Dict) = NaiveAveragePath()
-parse_path(path_val::Val, pde_conf::Dict) = error("Unknown PDE path: $(typeof(path_val))")
-
-
-# --- Representation Parsing ---
-function parse_representation(pde_conf::Dict)
-    rep_sym = get(pde_conf, :representation, :conservative)::Symbol
-    return parse_representation(Val(rep_sym), pde_conf)
-end
-
-parse_representation(::Val{:conservative}, pde_conf::Dict) = Conservative()
-parse_representation(::Val{:primitive}, pde_conf::Dict) = Primitive(parse_path(pde_conf))
-parse_representation(::Val{:lagrangian}, pde_conf::Dict) = Lagrangian(parse_path(pde_conf))
-parse_representation(::Val{:lagrange}, pde_conf::Dict) = Lagrangian(parse_path(pde_conf))
-parse_representation(rep_val::Val, pde_conf::Dict) = error("Unknown PDE representation: $(typeof(rep_val))")
-
-
-# --- Main Equation Builder ---
-function build_equation(pde_conf::Dict, ::Type{T}) where {T}
-    if !haskey(pde_conf, :name)
-        error("PDE configuration must include a strictly typed :name Symbol (e.g., :linear, :burgers).")
-    end
-    
-    eq_name = pde_conf[:name]::Symbol
-    return build_equation(Val(eq_name), pde_conf, T)
-end
-
-# Generic fallback
-build_equation(eq_name::Val, pde_conf::Dict, ::Type{T}) where {T} = error("PDE '$(typeof(eq_name))' is not implemented.")
-
-# --- Specific PDE Builders ---
-function build_equation(::Val{:linear}, pde_conf::Dict, ::Type{T}) where {T}
-    rep = parse_representation(pde_conf)
-    # D is implicitly defined by the length of the velocities tuple in the constructor
-    return LinearAdvection(pde_conf[:velocities]; rep=rep) 
-end
-
-function build_equation(::Val{:burgers}, pde_conf::Dict, ::Type{T}) where {T}
-    rep = parse_representation(pde_conf)
-    D = pde_conf[:D]::Int
-    
-    return BurgersEquation(Val(D), T, rep)
-end
-
-function build_equation(::Val{:euler}, pde_conf::Dict, ::Type{T}) where {T}
-    rep = parse_representation(pde_conf)
-    D = pde_conf[:D]::Int
-    
-    gamma = T(get(pde_conf, :gamma, GAS_GAMMA_EULER)) 
-    
-    return EulerEquation(Val(D), T, gamma, rep)
 end
 
 # =========================================================================

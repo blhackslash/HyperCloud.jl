@@ -47,7 +47,28 @@ function saveData!(
     end
 end
 
+"""
+    solve_equation(timestepper, eq, pg, tmax, dt; kwargs...)
 
+The primary simulation orchestrator governing the main time-stepping loop. 
+
+# Arguments
+- `timestepper::TimeStepper`: The selected Runge-Kutta or IMEX time integrator.
+- `eq::HyperbolicPDE`: The physical equation system.
+- `pg::ParticleGrid`: The active mesh-free domain configuration.
+- `tmax::Real`: The final simulation time.
+- `dt::Real`: The baseline time step.
+
+# Keyword Arguments
+- `is_cfl::Bool`: If true, `dt` is treated as a CFL number, and the physical time step is dynamically computed at each iteration using the grid and interpolator properties.
+- `snapshots::Integer`: The number of discrete data dumps to record evenly across the simulation timeline.
+- `remove_ghosts::Bool`: Strips boundary/ghost particles from the returned snapshot data if true.
+- `show_progress::Bool`: Toggles visual progress tracking.
+- `progress_interval::Real`: Sets the refresh rate (in seconds) for logging the simulation's progress and calculating the ETA.
+
+# Returns
+- A tuple containing: `(position_history, state_history, time_history, total_steps, elapsed_wall_time)`.
+"""
 function solve_equation(
     timestepper::TimeStepper, 
     eq::HyperbolicPDE{D, M, T, R}, 
@@ -57,6 +78,8 @@ function solve_equation(
     is_cfl::Bool = false,
     snapshots::Integer = 10,
     remove_ghosts::Bool = false,
+    show_progress::Bool = true,
+    progress_interval::Real = 1.0
 ) where {D, M, T, R}
     
     xs = Vector{Vector{Space{D, T}}}(undef, snapshots + 1)
@@ -74,6 +97,10 @@ function solve_equation(
 
     saveData!(xs, us, ts, snap_counter, pg, t, remove_ghosts)
     snap_counter += 1 
+    
+    @info "Using $(_use_threads() ? "@threads" : "@batch") for parallel runs!"
+
+    p = Progress(10000, desc="Running Simulation...", dt=progress_interval, enabled=show_progress)
     
     # Initialize trackers for the interval-based ETA
     last_log_time = time()
@@ -94,10 +121,41 @@ function solve_equation(
             snap_counter += 1
         end
 
-        current_time = time()
-        wall_dt = current_time - last_log_time
-        
+        if show_progress
+            current_progress = ceil(Int, (t / tmax_val) * 10000)
+            update!(p, min(current_progress, 10000))
+        else
+            current_time = time()
+            wall_dt = current_time - last_log_time
+            
+            if wall_dt > progress_interval
+                sim_dt = t - last_sim_time
+                pct = round((t / tmax_val) * 100, digits=1)
+                
+                # Calculate ETA only if simulation has advanced
+                if sim_dt > 0
+                    eta_seconds = (tmax_val - t) * (wall_dt / sim_dt)
+                    eta_secs_int = round(Int, eta_seconds)
+                    
+                    # Format as HH:MM:SS
+                    h = eta_secs_int ÷ 3600
+                    m = (eta_secs_int % 3600) ÷ 60
+                    s = eta_secs_int % 60
+                    eta_str = string(lpad(h, 2, '0'), ":", lpad(m, 2, '0'), ":", lpad(s, 2, '0'))
+                    
+                    @info "Simulation Progress: $pct% | ETA: $eta_str"
+                else
+                    @info "Simulation Progress: $pct% | ETA: Calculating..."
+                end
+                
+                # Reset interval trackers
+                last_log_time = current_time
+                last_sim_time = t
+            end
+        end
     end
+    
+    show_progress && finish!(p)
 
     if snap_counter <= snapshots + 1
         saveData!(xs, us, ts, snapshots + 1, pg, t, remove_ghosts)

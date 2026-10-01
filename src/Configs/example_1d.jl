@@ -1,3 +1,4 @@
+export example_1d
 function example_1d()
     varied_params = create_varied_dict()
     # Ensure parameter variations use the updated flattened namespace keys
@@ -10,14 +11,15 @@ function example_1d()
             # Global
             :snapshots => 25, 
             :remove_ghosts => false,
-            
+            :sim_func_name => :run_simulation,
+            :tmax => 10.0, 
+
             # Time Namespace
-            :Time_tmax => 10.0, 
             :Time_CFL => 0.2, 
             
             # Grid & Domain Namespace
             :Grid_domain => :rectangular,
-            :Grid_Ns => (300,), 
+            :Grid_Ns => (1000,), 
             :Grid_mins => (-5.0,), 
             :Grid_maxs => (5.0,),
             :Grid_periodic => true,
@@ -30,7 +32,7 @@ function example_1d()
             :Weight_alpha => 1.0,
             :Weight_range => 5.5,
             
-            # IC Namespace (Explicitly mapped fields replacing init_params)
+            # IC Namespace
             :IC_name => :gauss,
             :IC_a => (1.0,),
             :IC_b => (0.0,),
@@ -39,6 +41,8 @@ function example_1d()
             # PDE Namespace
             :PDE_name => :linear, 
             :PDE_velocities => ((1.0,),), 
+
+            :Scheme_MLS_order => 2,
         ),
         base_methods,
         ["RK2MUSCL2"];

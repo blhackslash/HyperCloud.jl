@@ -1,31 +1,35 @@
-struct LinearAdvection{D, M, T, R} <: HyperbolicPDE{D, M, T, R}
-    # Velocity is now explicitly a D-tuple of M x M Jacobians/Speed Matrices
-    vel::SVector{D, SMatrix{M, M, T}}
+# Notice the addition of the L parameter in the struct and the vel field
+struct LinearAdvection{D, M, T, L, R} <: HyperbolicPDE{D, M, T, R}
+    vel::Velocity{D, M, T, L}
+    max_eigs::SVector{D, T}
     rep::R
 end
 
-# Smart constructor mapping scalars/vectors to proper M x M SMatrices
-function LinearAdvection(velocities::Tuple; rep::R = Conservative()) where {R <: EquationRepresentation}
-
-    vel_svec = SVector(velocities...)
+# Smart constructor
+function LinearAdvection(velocities, ::Type{T}=eltype(velocities[1]); rep::R = Conservative()) where {T, R <: EquationRepresentation}
+    vel_svec = param2vel(velocities, T)
+    
     D = length(vel_svec)
     M = size(vel_svec[1], 1)
-    T = eltype(vel_svec[1])
+    L = M * M # Extract the total length parameter
     
-    return LinearAdvection{D, M, T, R}(vel_svec, rep)
+    # Precompute the exact spectral radius
+    max_eigs = SVector{D, T}(ntuple(d -> T(maximum(abs.(eigvals(Matrix(vel_svec[d]))))), Val(D)))
+    
+    return LinearAdvection{D, M, T, L, R}(vel_svec, max_eigs, rep)
 end
 
 @inline prim2cons(::LinearAdvection, U::State) = U
 @inline cons2prim(::LinearAdvection, W::State) = W
 
-@inline function flux(eq::LinearAdvection{D, M, T}, U::State{M, T}) where {D, M, T}
-    return Flux{D, M, T}(ntuple(d -> eq.vel[d] * U, Val(D)))
+@inline function flux(eq::LinearAdvection{D, M, T}, U::State) where {D, M, T}
+    return Flux{D, M, T}(ntuple(Val(D)) do d
+        State{M, T}(eq.vel[d] * U)
+    end)
 end
 
-@inline function max_eigenvalue(eq::LinearAdvection{D, M, T}, U::State{M, T}, d::Int) where {D, M, T}
-    # The max wave speed is the maximum eigenvalue of the M x M advection matrix
-    # (For M=1, this trivially reduces to the scalar speed)
-    return maximum(abs.(eigvals(eq.vel[d])))
+@inline function max_eigenvalue(eq::LinearAdvection, U::State, d::Int)
+    return eq.max_eigs[d]
 end
 
 # API implementation returning the strict M x M matrix
@@ -38,7 +42,10 @@ end
 
 function build_equation(::Val{:linear}, pde_conf::Dict, context::Dict)
     rep = parse_representation(pde_conf)
-    return LinearAdvection(pde_conf[:velocities]; rep=rep) 
+    T = context[:Type]::DataType
+    
+    # We pass T securely, and the smart constructor utilizes param2vel internally
+    return LinearAdvection(pde_conf[:velocities], T; rep=rep) 
 end
 
 # ---------------------------------------------------------

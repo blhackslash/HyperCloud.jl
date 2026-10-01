@@ -192,11 +192,6 @@ end
     end)
 end
 
-
-@inline function flux_dot(F::Flux{D, NM, T}, m_idx::Int, scaled_inv_speed::Space{D, T}) where {D, NM, T}
-    return sum(ntuple(d -> F[d][m_idx] * scaled_inv_speed[d], Val(D)))
-end
-
 # =========================================================================
 # 1. SET INITIAL CONDITIONS
 # =========================================================================

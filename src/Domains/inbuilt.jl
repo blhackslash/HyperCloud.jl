@@ -36,43 +36,50 @@ function parse_bc(domain_conf::Dict)
     return bc_map
 end
 
-# --- Periodicity Parsing ---
-function parse_periodic(domain_conf::Dict, D::Int)
-    is_per_input = get(domain_conf, :periodic, false)
-    return isa(is_per_input, Bool) ? SVector{D, Bool}(ntuple(_ -> is_per_input, Val(D))) : SVector{D, Bool}(is_per_input)
-end
-
 # --- Main Domain Builder ---
-function build_domain(domain_conf::Dict, D::Int, ::Type{T}) where {T}
+function build_domain(domain_conf::Dict, context::Dict)
     # Direct pass-through if the user supplied an already-instantiated GeometricDomain
     if haskey(domain_conf, :instance) && domain_conf[:instance] isa GeometricDomain
         return domain_conf[:instance]
     end
     
-    domain_name = get(domain_conf, :name, :rectangular)::Symbol
-    return build_domain(Val(domain_name), domain_conf, D, T)
+    if !haskey(domain_conf, :domain)
+        error("Domain configuration must strictly include a :domain key (e.g., :rectangular, :spherical).")
+    end
+    
+    domain_name = domain_conf[:domain]::Symbol
+    return _build_domain(Val(domain_name), domain_conf, context)
 end
 
 # Generic fallback
-build_domain(name::Val, domain_conf::Dict, D::Int, ::Type{T}) where {T} = error("Unknown domain shape: $(typeof(name))")
+_build_domain(name::Val, domain_conf::Dict, context::Dict) = error("Unknown domain shape: $(typeof(name))")
 
 # --- Specific Domain Builders ---
-function build_domain(::Val{:rectangular}, domain_conf::Dict, D::Int, ::Type{T}) where {T}
-    bc_map = parse_bc(domain_conf)
-    is_per = parse_periodic(domain_conf, D)
+function _build_domain(::Val{:rectangular}, domain_conf::Dict, context::Dict)
+    T = context[:Type]::DataType
     
-    req_mins = T.(domain_conf[:mins]::Tuple)
-    req_maxs = T.(domain_conf[:maxs]::Tuple)
+    bc_map = parse_bc(domain_conf)
+    
+    # Directly pull periodicity (expected to be Bool or NTuple{D, Bool})
+    is_per = get(domain_conf, :periodic, false)
+    
+    req_mins = Tuple(T.(domain_conf[:mins]))
+    req_maxs = Tuple(T.(domain_conf[:maxs]))
     
     return get_rectangular_domain(T, req_mins, req_maxs; bc_map = bc_map, is_periodic = is_per)
 end
 
-function build_domain(::Val{:spherical}, domain_conf::Dict, D::Int, ::Type{T}) where {T}
-    bc_map = parse_bc(domain_conf)
-    is_per = parse_periodic(domain_conf, D)
+function _build_domain(::Val{:spherical}, domain_conf::Dict, context::Dict)
+    T = context[:Type]::DataType
+    D = context[:D]::Int
     
-    req_mins = T.(domain_conf[:mins]::Tuple)
-    req_maxs = T.(domain_conf[:maxs]::Tuple)
+    bc_map = parse_bc(domain_conf)
+    
+    # Directly pull periodicity
+    is_per = get(domain_conf, :periodic, false)
+    
+    req_mins = Tuple(T.(domain_conf[:mins]))
+    req_maxs = Tuple(T.(domain_conf[:maxs]))
     
     center = ntuple(d -> (req_mins[d] + req_maxs[d]) / 2.0, Val(D))
     radius = (req_maxs[1] - req_mins[1]) / 2.0
