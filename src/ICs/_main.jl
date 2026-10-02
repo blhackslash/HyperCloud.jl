@@ -1,7 +1,7 @@
 abstract type InitialCondition end
 abstract type SmoothInitialCondition <: InitialCondition end
 
-function setInitialConditions!(pg::ParticleGrid{D, M}, eq::HyperbolicPDE, IC::InitialCondition) where {D, M}
+function set_initial_conditions!(pg::ParticleGrid{D, M}, eq::HyperbolicPDE, IC::InitialCondition) where {D, M}
     positions = pg.core.positions
     
     @inbounds for i in 1:pg.meta.N

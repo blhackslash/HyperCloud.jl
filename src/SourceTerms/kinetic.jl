@@ -197,7 +197,7 @@ end
 # =========================================================================
 
 # --- LOCAL Relaxation Initialization ---
-function setInitialConditions!(
+function set_initial_conditions!(
     pg::ParticleGrid{D, NK}, 
     st::RelaxationSourceTerm{D, NM, NK},     
     IC::InitialCondition,
@@ -221,7 +221,7 @@ function setInitialConditions!(
 end
 
 # --- NON-LOCAL Relaxation Initialization ---
-function setInitialConditions!(
+function set_initial_conditions!(
     pg::ParticleGrid{D, NK},
     st::NonLocalRelaxationSourceTerm{D, NM, NK},
     IC::InitialCondition,

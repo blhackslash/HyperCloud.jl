@@ -48,14 +48,14 @@ function build_domain(domain_conf::Dict, context::Dict)
     end
     
     domain_name = domain_conf[:domain]::Symbol
-    return _build_domain(Val(domain_name), domain_conf, context)
+    return build_domain(Val(domain_name), domain_conf, context)
 end
 
 # Generic fallback
-_build_domain(name::Val, domain_conf::Dict, context::Dict) = error("Unknown domain shape: $(typeof(name))")
+build_domain(name::Val, domain_conf::Dict, context::Dict) = error("Unknown domain shape: $(typeof(name))")
 
 # --- Specific Domain Builders ---
-function _build_domain(::Val{:rectangular}, domain_conf::Dict, context::Dict)
+function build_domain(::Val{:rectangular}, domain_conf::Dict, context::Dict)
     T = context[:Type]::DataType
     
     bc_map = parse_bc(domain_conf)
@@ -69,7 +69,7 @@ function _build_domain(::Val{:rectangular}, domain_conf::Dict, context::Dict)
     return get_rectangular_domain(T, req_mins, req_maxs; bc_map = bc_map, is_periodic = is_per)
 end
 
-function _build_domain(::Val{:spherical}, domain_conf::Dict, context::Dict)
+function build_domain(::Val{:spherical}, domain_conf::Dict, context::Dict)
     T = context[:Type]::DataType
     D = context[:D]::Int
     

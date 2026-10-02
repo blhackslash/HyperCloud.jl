@@ -1,6 +1,6 @@
 # --- Limiter Builder ---
 function build_limiter(limiter_conf::Dict, context::Dict)
-    name = limiter_conf[:name]::Symbol
+    name = get(limiter_conf,:name,:none)::Symbol
     return build_limiter(Val(name), limiter_conf, context)
 end
 

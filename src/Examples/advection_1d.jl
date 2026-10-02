@@ -1,5 +1,5 @@
-export example_1d
-function example_1d()
+export advection_1d
+function advection_1d()
     varied_params = create_varied_dict()
     # Ensure parameter variations use the updated flattened namespace keys
     push!(varied_params, :Grid_SEED => [10, 100, 1000, 10000]) 
