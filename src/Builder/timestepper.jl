@@ -1,3 +1,5 @@
+export build_tableau, _build_timestepper
+
 # --- Tableau Builder ---
 function build_tableau(time_conf::Dict, context::Dict)
     name = time_conf[:stepper]::Symbol

@@ -1,3 +1,5 @@
+export build_mood, build_mood_strategy, build_mood_criterion
+
 # --- MOOD Criteria & Strategies ---
 build_mood_criterion(name::Val, conf::Dict, context::Dict) = error("Unknown MOOD criterion: $(typeof(name))")
 build_mood_criterion(::Val{:none}, conf::Dict, context::Dict) = NoMOOD()

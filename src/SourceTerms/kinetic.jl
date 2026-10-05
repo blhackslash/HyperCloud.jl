@@ -1,3 +1,5 @@
+export Kin2Macro, RelaxationSourceTerm, NonLocalRelaxationSourceTerm
+
 """
     Kin2Macro{NM, NK}
 

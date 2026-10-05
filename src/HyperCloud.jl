@@ -27,5 +27,14 @@ include("SimulationFunctions/_main.jl")
 
 include("inbuilt_methods.jl")
 include("time_integration.jl")
+include("macros.jl")
 
+export @sim, @plot, @backup
+export enable_progress_bar!, set_progress_interval!
+export BONITO_LISTEN_URL, BONITO_LISTEN_PORT, BONITO_PROXY_URL, BONITO_IS_CONFIGURED
+export CONFIG_SEARCH_PATHS, CONFIG_ROOT_OVERWRITE
+
+function __init__()
+    set_target_module!(@__MODULE__)
+end
 end

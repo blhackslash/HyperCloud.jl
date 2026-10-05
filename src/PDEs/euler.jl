@@ -1,4 +1,6 @@
-struct EulerEquation{D, M, T, R} <: HyperbolicPDE{D, M, T, R}
+export EulerEquation
+
+struct EulerEquation{D, M, T, R} <: HyperbolicPDE{D, M, T}
     gamma::T
     rep::R
 end

@@ -1,3 +1,5 @@
+export Sine
+
 struct Sine{D, M} <: SmoothInitialCondition
     a::State{M}
     period::Space{D}

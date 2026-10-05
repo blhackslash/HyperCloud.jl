@@ -1,3 +1,9 @@
+export EquationRepresentation, NCRepresentation, Conservative
+
+abstract type EquationRepresentation end
+abstract type NCRepresentation <: EquationRepresentation end
+struct Conservative <: EquationRepresentation end
+
 # --- Representation Parsing ---
 function parse_representation(pde_conf::Dict)
     rep_sym = get(pde_conf, :representation, :conservative)::Symbol

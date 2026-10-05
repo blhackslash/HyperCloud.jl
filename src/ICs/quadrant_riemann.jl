@@ -1,3 +1,5 @@
+export QRiemann
+
 struct QRiemann{D, M, N_states} <: InitialCondition
     u_states::NTuple{N_states, State{M}} 
     p0::Space{D}

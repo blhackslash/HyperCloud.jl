@@ -1,3 +1,5 @@
+export InitialCondition, SmoothInitialCondition, set_initial_conditions!, build_ic
+
 abstract type InitialCondition end
 abstract type SmoothInitialCondition <: InitialCondition end
 

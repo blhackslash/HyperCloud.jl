@@ -1,3 +1,5 @@
+export Gauss
+
 struct Gauss{D, M} <: SmoothInitialCondition
     a::State{M}
     b::Space{D}

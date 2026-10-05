@@ -1,3 +1,5 @@
+export build_limiter
+
 # --- Limiter Builder ---
 function build_limiter(limiter_conf::Dict, context::Dict)
     name = get(limiter_conf,:name,:none)::Symbol

@@ -1,4 +1,4 @@
-export solve_equation
+export solve_equation, saveData!
 
 """
     saveData!(xs_storage, us_storage, ts_storage, snap_idx, pg, current_t, remove_ghosts)
@@ -71,7 +71,7 @@ The primary simulation orchestrator governing the main time-stepping loop.
 """
 function solve_equation(
     timestepper::TimeStepper, 
-    eq::HyperbolicPDE{D, M, T, R}, 
+    eq::HyperbolicPDE{D, M, T}, 
     pg::ParticleGrid{D, M, T},
     tmax::Real,
     dt::Real;
@@ -80,7 +80,7 @@ function solve_equation(
     remove_ghosts::Bool = false,
     show_progress::Bool = true,
     progress_interval::Real = 1.0
-) where {D, M, T, R}
+) where {D, M, T}
     
     xs = Vector{Vector{Space{D, T}}}(undef, snapshots + 1)
     us = Vector{Vector{State{M, T}}}(undef, snapshots + 1)
@@ -98,7 +98,7 @@ function solve_equation(
     saveData!(xs, us, ts, snap_counter, pg, t, remove_ghosts)
     snap_counter += 1 
     
-    @info "Using $(_use_threads() ? "@threads" : "@batch") for parallel runs!"
+    @info "Using $(get_use_threads() ? "@threads" : "@batch") for parallel runs!"
 
     p = Progress(10000, desc="Running Simulation...", dt=progress_interval, enabled=show_progress)
     

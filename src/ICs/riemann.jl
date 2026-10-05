@@ -1,3 +1,5 @@
+export riemann
+
 struct Riemann{D, M} <: InitialCondition
     uL::State{M}
     uR::State{M}

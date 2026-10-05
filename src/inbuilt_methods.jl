@@ -1,3 +1,5 @@
+export create_method, generate_relax_params, get_master_method_dict
+
 # 1. Define the parameters that direct solvers should completely ignore
 # Note: Updated to map to your new flattened namespace keys!
 const ignore_relax = [:Kinetic_velocities, :Kinetic_epsilon, :Kinetic_indices, :Kinetic_interior_factor, :save_relax]

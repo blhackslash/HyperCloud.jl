@@ -1,3 +1,5 @@
+export build_particle_grid
+
 function build_particle_grid(grid_conf::Dict, context::Dict)
     # 1. Pull required dependencies from the context
     T = context[:Type]::DataType

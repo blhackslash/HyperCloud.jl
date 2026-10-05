@@ -1,3 +1,5 @@
+export build_kinetic_system
+
 function build_kinetic_system(kin_conf::Dict, context::Dict)
     T = context[:Type]::DataType
     D = context[:D]::Int

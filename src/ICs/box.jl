@@ -1,3 +1,5 @@
+export Box
+
 struct Box{D, M} <: InitialCondition
     u_bg::State{M}
     u_box::State{M}

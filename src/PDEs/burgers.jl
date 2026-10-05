@@ -1,8 +1,6 @@
-struct BurgersEquation{D, T, R} <: HyperbolicPDE{D, 1, T, R} 
-    rep::R
-end
+export BurgersEquation
 
-BurgersEquation(::Val{D}, ::Type{T}, rep::R = Conservative()) where {D, T, R <: EquationRepresentation} = BurgersEquation{D, T, R}(rep)
+struct BurgersEquation{D, T} <: HyperbolicPDE{D, 1, T} end
 
 @inline prim2cons(::BurgersEquation, u::State) = u
 @inline cons2prim(::BurgersEquation, w::State) = w
@@ -21,9 +19,8 @@ end
 function build_equation(::Val{:burgers}, pde_conf::Dict, context::Dict)
     T = context[:Type]::DataType
     D = pde_conf[:D]::Int
-    rep = parse_representation(pde_conf)
     
-    return BurgersEquation(Val(D), T, rep)
+    return BurgersEquation(Val(D), T)
 end
 
 # Generic fallback for t=0 or unhandled ICs

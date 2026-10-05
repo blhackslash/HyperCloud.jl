@@ -1,3 +1,5 @@
+export SRiemann
+
 struct SRiemann{D, M} <: SmoothInitialCondition
     uL::State{M}
     uR::State{M}

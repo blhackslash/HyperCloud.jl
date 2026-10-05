@@ -1,3 +1,5 @@
+export build_scheme
+
 # --- Main Scheme Builder ---
 function build_scheme(conf::Dict, context::Dict)
     name = conf[:name]::Symbol
