@@ -49,21 +49,32 @@ that evaluates the exact analytical solution using a unified spacetime tensor.
 function analytical_solution(shared_params::ParamDict)
     # 1. Instantiate the PDE struct
     # We use Float64 as the standard type for analytical solutions
-    eq, D, NM, vel_var = build_equation(shared_params, Float64) 
+    T = get(shared_params, :real_type, Float64) 
+    context = Dict{Symbol, Any}()
+    context[:Type] = T
+
+    pde_conf    = extract_namespace(shared_params, :PDE)
+    domain_conf = extract_namespace(shared_params, :Grid)
+    ic_conf     = extract_namespace(shared_params, :IC)
+
+    # 2. Base Equation & Dimensions
+    eq = build_equation(pde_conf, context)
+    D = get_D(eq)
     
-    if !haskey(shared_params, :init_func)
-        error("Analytical Factory: Missing 'init_func' in shared_params")
-    end
+    context[:Equation] = eq
+    context[:D] = D
+    context[:M] = get_M(eq)
     
     # 2. Build the pure mathematical geometry (handles boundaries and periodicity)
-    geom = build_geometric_domain(shared_params, D, Float64)
+    geom = build_domain(domain_conf, context)
+    context[:Domain] = geom
     
     # 3. Instantiate the InitialCondition struct using the modular builder
-    ic = build_initial_condition(shared_params, D, Float64)
+    IC = build_ic(ic_conf, context)
     
     # 4. Dispatch to the correct pure mathematical closure 
     # (Notice how it no longer depends on the messy parameters dict)
-    return analytic_closure(eq, ic, geom)
+    return analytic_closure(eq, IC, geom)
 end
 
 # ==============================================================================

@@ -75,7 +75,7 @@ function build_equation(::Val{:euler}, pde_conf::Dict, context::Dict)
     D = pde_conf[:D]::Int
     rep = parse_representation(pde_conf)
     
-    gamma = T(get(pde_conf, :gamma, GAS_GAMMA_EULER)) 
+    gamma = T(pde_conf[:gamma])
     
     return EulerEquation(Val(D), T, gamma, rep)
 end

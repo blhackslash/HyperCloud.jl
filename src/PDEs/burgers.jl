@@ -20,7 +20,7 @@ function build_equation(::Val{:burgers}, pde_conf::Dict, context::Dict)
     T = context[:Type]::DataType
     D = pde_conf[:D]::Int
     
-    return BurgersEquation(Val(D), T)
+    return BurgersEquation{D, T}()
 end
 
 # Generic fallback for t=0 or unhandled ICs

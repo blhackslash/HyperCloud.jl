@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+  - family-names: "Jung"
+    given-names: "Pascal"
+    email: "dev@blackslash.win"
+title: "HyperCloud.jl: A comprehensive meshfree simulation framework for solving N-dimensional hyperbolic PDEs with high-order numerical accuracy."
+version: 0.1.0
+date-released: 2026-09-17
+url: "https://github.com/blhackslash/HyperCloud.jl"

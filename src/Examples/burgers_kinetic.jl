@@ -27,7 +27,7 @@ function burgers_kinetic()
             :Grid_maxs => (5.0,),
             :Grid_periodic => true,
             :Grid_randomness_factor => (0.2,),
-            :Grid_SEED => 42,
+            :Grid_seed => 42,
             :Grid_mover => :none,
             
             # Weight Namespace
@@ -44,7 +44,6 @@ function burgers_kinetic()
             # PDE Namespace
             :PDE_name => :burgers, 
             :PDE_D => 1,
-            :PDE_representation => :conservative,
             
             # Kinetic Namespace
             :Kinetic_velocities => kin_vels,

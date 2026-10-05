@@ -165,7 +165,7 @@ macro sim(name)
             
             # If the file defines and returns a function instead of a raw config, evaluate it.
             if config isa Function
-                config = config()
+                config = Base.invokelatest(config)
             end
         end
         
@@ -234,7 +234,7 @@ macro plot(name)
                 path = HyperCloud.resolve_config_path($mod,$name_str)
                 config = Base.include($mod, path)
                 if config isa Function
-                    config = config()
+                    config = Base.invokelatest(config)
                 end
             end
 

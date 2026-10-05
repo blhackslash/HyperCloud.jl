@@ -27,7 +27,8 @@ function build_particle_grid(grid_conf::Dict, context::Dict)
     weight_func = build_weights(weight_conf, context)
     
     # Strict SEED extraction
-    rng = MersenneTwister(grid_conf[:SEED]::Int)
+    seed = all(iszero,randomness) ? 42 : grid_conf[:seed]
+    rng = MersenneTwister(seed::Int)
 
     # 5. Construct the Particle Grid
     pg = ParticleGrid(

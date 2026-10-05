@@ -2,7 +2,7 @@ export advection_1d
 function advection_1d()
     varied_params = create_varied_dict()
     # Ensure parameter variations use the updated flattened namespace keys
-    push!(varied_params, :Grid_SEED => [10, 100, 1000, 10000]) 
+    push!(varied_params, :Grid_seed => [10, 100, 1000, 10000]) 
     
     base_methods = get_master_method_dict()
     
@@ -24,7 +24,7 @@ function advection_1d()
             :Grid_maxs => (5.0,),
             :Grid_periodic => true,
             :Grid_randomness_factor => (0.2,),
-            :Grid_SEED => 42,
+            :Grid_seed => 42,
             :Grid_mover => :none,
             
             # Weight Namespace
