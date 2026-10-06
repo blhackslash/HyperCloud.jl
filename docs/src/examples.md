@@ -34,12 +34,6 @@ A classic 1D Riemann problem for the Euler equations.
 *   **Grid:** Resolves the domain using 330 particles bounded by a Fixed Dirichlet condition on the left and an Outflow condition on the right.
 *   **Schemes:** Compares the exact analytical solution against a 1st-order baseline (`RK2Upwind1`), a TVD limiter (`RK2MUSCL2_VK`), and high-order MOOD strategies (e.g., `RK4MUSCL4_U2_EPD1`).
 
-### 2D Double Mach Reflection (`euler_2d_DMR`)
-A demanding 2D Euler benchmark featuring complex shock reflections and Mach stem formation.
-*   **Domain:** Operates on a rectangular domain initialized with 450x150 particles.
-*   **Physics:** Defines a pre-shock and post-shock state interacting with a reflecting wedge.
-*   **Boundaries:** Utilizes specialized boundary condition functors (`DMRTopBC`, `DMRBottomBC`, `DMRLeftBC`) to correctly inject the time-dependent exact shock position and handle the post-shock slip wall inversion.
-
 ### 1D Kinetic Burgers (`burgers_kinetic`)
 Demonstrates the integration of the kinetic relaxation solver applied to the 1D Burgers' equation.
 *   **Domain:** Advects a Gaussian pulse across a periodic domain using 300 particles.

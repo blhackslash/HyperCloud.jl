@@ -364,6 +364,35 @@ end
             @test exact_rare(SVector{2, Float64}(1.0, 1.0))[1]  ≈ 1.0 # Inside fan (x/t = 1.0/1.0)
             @test exact_rare(SVector{2, Float64}(3.0, 1.0))[1]  ≈ 2.0 # Right of fan
         end
+
+        @testset "Box (Top-Hat & Well)" begin
+            # Top-Hat Case: background = 0.0, inside box = 2.0
+            ic_tophat = Box(State{1}(0.0), State{1}(2.0), Space{1}(0.0), Space{1}(2.0))
+            exact_tophat = analytic_closure(eq, ic_tophat, geom)
+            
+            # The top-hat analytical closure calculates an interaction time t_int[cite: 37].
+            # For this setup, t_int = 2.0. Before this time (e.g., t=1.0), the left side is a rarefaction and the right is a shock[cite: 37].
+            @test exact_tophat(SVector{2, Float64}(-1.0, 1.0))[1] ≈ 0.0 # Left background[cite: 37]
+            @test exact_tophat(SVector{2, Float64}(1.0, 1.0))[1]  ≈ 1.0 # Inside left rarefaction fan ((x-xs)/t)[cite: 37]
+            @test exact_tophat(SVector{2, Float64}(2.5, 1.0))[1]  ≈ 2.0 # Inside box plateau, left of shock[cite: 37]
+            @test exact_tophat(SVector{2, Float64}(3.5, 1.0))[1]  ≈ 0.0 # Right of shock[cite: 37]
+            
+            # After t_int (e.g., t=4.0), the rarefaction catches up and the shock decays[cite: 37].
+            # Shock position is calculated as xs + ug*t + C*sqrt(t) where C = sqrt(8) -> x_shock ≈ 5.6568[cite: 37].
+            @test exact_tophat(SVector{2, Float64}(2.0, 4.0))[1] ≈ 0.5 # Inside the expanding, decaying fan[cite: 37]
+            @test exact_tophat(SVector{2, Float64}(6.0, 4.0))[1] ≈ 0.0 # Strictly right of the decayed shock[cite: 37]
+            
+            # Well Case: background = 2.0, inside box = 0.0
+            ic_well = Box(State{1}(2.0), State{1}(0.0), Space{1}(0.0), Space{1}(2.0))
+            exact_well = analytic_closure(eq, ic_well, geom)
+            
+            # For the well case, the left boundary produces a shock and the right boundary produces a rarefaction[cite: 37].
+            # t_int is again 2.0. Testing at t=1.0: left shock is at x=1.0, right fan spans x=2.0 to x=4.0[cite: 37].
+            @test exact_well(SVector{2, Float64}(0.5, 1.0))[1] ≈ 2.0 # Left of shock (background)[cite: 37]
+            @test exact_well(SVector{2, Float64}(1.5, 1.0))[1] ≈ 0.0 # Inside the well state[cite: 37]
+            @test exact_well(SVector{2, Float64}(3.0, 1.0))[1] ≈ 1.0 # Inside the right rarefaction fan ((x-xe)/t)[cite: 37]
+            @test exact_well(SVector{2, Float64}(5.0, 1.0))[1] ≈ 2.0 # Right of fan (background)[cite: 37]
+        end
     end
 
     @testset "Euler Equation (Sod Shock Tube)" begin
