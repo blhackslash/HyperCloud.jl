@@ -1,4 +1,9 @@
 # HyperCloud
+
+[![Build Status](https://github.com/blhackslash/HyperCloud.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/blhackslash/HyperCloud.jl/actions/workflows/CI.yml)
+[![Coverage](https://codecov.io/gh/blhackslash/HyperCloud.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/blhackslash/HyperCloud.jl)
+[![Stable Docs](https://img.shields.io/badge/docs-dev-blue.svg)](https://blhackslash.github.io/HyperCloud.jl/dev/)
+
 **HyperCloud.jl** is an advanced meshfree simulation framework designed to solve arbitrary hyperbolic conservation laws. Powered by a high-performance, physics-agnostic mathematical engine, HyperCloud provides a complete computational environment. It combines dynamic particle topologies with high-order spatial approximations—including moving-least-squares MUSCL reconstruction and Multi-Dimensional Optimal Order Detection (MOOD)—controlled entirely through a streamlined, macro-driven execution workflow.
 
 HyperCloud integrates natively with the **PDEStudio** ecosystem to deliver a frictionless research pipeline from computation to visualization. All simulation outputs are rigorously managed and serialized via `PDEStudioCore.jl`, providing reproducible, cryptographically hashed disk caching and highly optimized statistical integration. For visual analysis, HyperCloud interfaces directly with `PDEStudio.jl`, allowing you to instantly route your meshfree Lagrangian datasets to a high-performance local renderer (`GLMakie`) or serve interactive web visualizations directly from a headless compute node to your browser (`WGLMakie` via Bonito).
