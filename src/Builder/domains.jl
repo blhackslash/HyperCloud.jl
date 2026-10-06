@@ -18,9 +18,9 @@ function parse_bc(domain_conf::Dict)
             bc_map[tag] = bc_obj
         else
             bc_sym = Symbol(bc_obj)
-            if bc_sym === :outflow || bc_sym === :OutflowBC
+            if bc_sym === :outflow
                 bc_map[tag] = OutflowBC()
-            elseif bc_sym === :fixed_dirichlet || bc_sym === :FixedDirichlet
+            elseif bc_sym === :fixed_dirichlet
                 bc_map[tag] = FixedDirichlet()
             else
                 if isdefined(Main, bc_sym)
@@ -38,6 +38,12 @@ function parse_bc(domain_conf::Dict)
 end
 
 # --- Main Domain Builder ---
+"""
+    build_domain(domain_conf::Dict, context::Dict)
+
+Instantiates the continuous `GeometricDomain` (e.g., `:rectangular` or `:spherical`) and parses boundary conditions.
+Requires a `:domain` key unless a pre-instantiated `GeometricDomain` is passed via the `:instance` key. Dynamically resolves boundary conditions using `parse_bc` and maps periodic boundary flags.
+"""
 function build_domain(domain_conf::Dict, context::Dict)
     # Direct pass-through if the user supplied an already-instantiated GeometricDomain
     if haskey(domain_conf, :instance) && domain_conf[:instance] isa GeometricDomain
@@ -52,12 +58,18 @@ function build_domain(domain_conf::Dict, context::Dict)
     return build_domain(Val(domain_name), domain_conf, context)
 end
 
-# Generic fallback
+"""
+    build_domain(name::Val, domain_conf::Dict, context::Dict)
+
+Generic fallback for custom domain instantiation. 
+Users can extend this by defining `build_domain(::Val{:my_domain}, ...)`. 
+Instantiates the continuous `GeometricDomain` (e.g., `:rectangular` or `:spherical`) and parses boundary conditions.
+"""
 build_domain(name::Val, domain_conf::Dict, context::Dict) = error("Unknown domain shape: $(typeof(name))")
 
 # --- Specific Domain Builders ---
 function build_domain(::Val{:rectangular}, domain_conf::Dict, context::Dict)
-    T = context[:Type]::DataType
+    T = context[:T]::DataType
     
     bc_map = parse_bc(domain_conf)
     
@@ -71,7 +83,7 @@ function build_domain(::Val{:rectangular}, domain_conf::Dict, context::Dict)
 end
 
 function build_domain(::Val{:spherical}, domain_conf::Dict, context::Dict)
-    T = context[:Type]::DataType
+    T = context[:T]::DataType
     D = context[:D]::Int
     
     bc_map = parse_bc(domain_conf)

@@ -1,13 +1,19 @@
 
 export run_direct_simulation
 
+"""
+    run_direct_simulation(params::ParamDict) -> Union{AbstractSimData, Nothing}
+
+Orchestrates the standard execution pipeline for explicit macroscopic PDEs. 
+Extracts configuration namespaces, builds the mathematical equation system, continuous domain, and particle grid, and instantiates the spatial numerical schemes. Applies the initial condition directly to the particle grid and executes the main solver loop, packaging the raw conservative state vectors into an `AbstractSimData` object.
+"""
 function run_direct_simulation(params::ParamDict)::Union{AbstractSimData, Nothing}
-    T = get(params, :real_type, Float64) 
+    T = get(params, :T, Float64) 
     
     try
         @info "--- Running Direct N-Dimensional Simulation ---"
         context = Dict{Symbol, Any}()
-        context[:Type] = T
+        context[:T] = T
         
         # 1. Extract Config Namespaces
         pde_conf    = extract_namespace(params, :PDE)

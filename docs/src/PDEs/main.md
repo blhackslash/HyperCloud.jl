@@ -26,7 +26,7 @@ To support robust verification and error analysis, the framework provides a unif
 ## Documentation
 
 ```@docs
-build_equation
 analytical_solution
+analytic_closure
 EquationRepresentation
 ```

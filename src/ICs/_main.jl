@@ -1,7 +1,22 @@
 export InitialCondition, set_initial_conditions!, build_ic
 
+"""
+    InitialCondition
+
+Abstract base type for all initial condition functors in the framework. 
+Functors derived from this type evaluate the starting state of the physical system at a given spatial coordinate.
+"""
 abstract type InitialCondition end
 
+"""
+    set_initial_conditions!(pg::ParticleGrid, eq::HyperbolicPDE, IC::InitialCondition)
+    set_initial_conditions!(pg::ParticleGrid, st::RelaxationSourceTerm, IC::InitialCondition, eq_macro::HyperbolicPDE)
+
+Evaluates the initial condition functor and applies it to the particle grid.
+
+- **Direct Formulation:** Iterates over the grid and evaluates the `IC` functor for each spatial position, assigning the exact physical state to `pg.rhos`[cite: 35].
+- **Kinetic Formulation:** Accepts a macroscopic `InitialCondition` and a `RelaxationSourceTerm`. It evaluates the macroscopic state and physical fluxes at each coordinate, and directly initializes the particles into the kinetic Maxwellian equilibrium state component-by-component[cite: 13].
+"""
 function set_initial_conditions!(pg::ParticleGrid{D, M}, eq::HyperbolicPDE, IC::InitialCondition) where {D, M}
     positions = pg.core.positions
     

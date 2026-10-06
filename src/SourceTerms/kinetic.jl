@@ -35,7 +35,14 @@ end
 # =========================================================================
 # LOCAL RELAXATION SOURCE TERM
 # =========================================================================
+"""
+    RelaxationSourceTerm{D, NM, NK, T, MEQ} <: AbstractImplicitSourceTerm
 
+Models the stiff local relaxation of a kinetic system toward the macroscopic Maxwellian equilibrium state.
+
+# Constructors
+- `RelaxationSourceTerm(km, eps, coeffs, macro_eq, eq_kin, interior_factor)`: Precomputes the scaled inverse kinetic wave speeds utilizing the `kinetic_wave_speed` API, scaling them by the `interior_factor` (which defaults to the spatial dimension `D`). It stores the inverse of the relaxation parameter (`eps`) to optimize the runtime implicit solve.
+"""
 struct RelaxationSourceTerm{D, NM, NK, T, MEQ <: HyperbolicPDE} <: AbstractImplicitSourceTerm
     km::Kin2Macro{NM, NK}
     macro_eq::MEQ

@@ -1,13 +1,19 @@
 
 export  run_kinetic_simulation
 
+"""
+    run_kinetic_simulation(params::ParamDict) -> Union{AbstractSimData, Nothing}
+
+Manages the execution pipeline for highly coupled kinetic relaxation systems. 
+Builds a two-tier equation architecture by first constructing the base macroscopic equation, then constructing the kinetic system and its associated `RelaxationSourceTerm`. Dynamically overwrites the execution context to operate in the higher `NK`-dimensional space during integration. Automatically collapses the `NK`-dimensional kinetic data back into the macroscopic state before returning the output, unless `save_relax` is set to true.
+"""
 function run_kinetic_simulation(params::ParamDict)::Union{AbstractSimData, Nothing}
-    T = get(params, :real_type, Float64) 
+    T = get(params, :T, Float64) 
     
     try
         @info "--- Running Kinetic N-Dimensional Simulation ---"
         context = Dict{Symbol, Any}()
-        context[:Type] = T
+        context[:T] = T
         
         # 1. Extract Config Namespaces
         pde_conf    = extract_namespace(params, :PDE)

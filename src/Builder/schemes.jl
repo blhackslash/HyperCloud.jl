@@ -1,15 +1,28 @@
 export build_scheme
 
 # --- Main Scheme Builder ---
+"""
+    build_scheme(conf::Dict, context::Dict)
+
+Constructs the primary spatial numerical scheme.
+Dispatches based on the `:name` key (e.g., `:MUSCL`, `:Upwind`, `:Central`, `:WENO`). Retrieves pre-built dependencies like the selected flux and limiter from the execution context and extracts the scheme's formal `:order` and `:MLS_order` (divergence order).
+"""
 function build_scheme(conf::Dict, context::Dict)
     name = conf[:name]::Symbol
     return build_scheme(Val(name), conf, context)
 end
 
+"""
+    build_scheme(name::Val, conf::Dict, context::Dict)
+
+Generic fallback for custom spatial numerical schemes.
+Users can extend this by defining `build_scheme(::Val{:my_scheme}, ...)`.
+Retrieves pre-built dependencies like the selected flux and limiter from the execution context and extracts the scheme's formal `:order` and `:MLS_order`.
+"""
 build_scheme(name::Val, conf::Dict, context::Dict) = error("Unknown Scheme: $(typeof(name))")
 
 function build_scheme(::Val{:MUSCL}, conf::Dict, context::Dict)
-    T = context[:Type]::DataType
+    T = context[:T]::DataType
     D = context[:D]::Int
     M = context[:M]::Int
     
@@ -23,7 +36,7 @@ function build_scheme(::Val{:MUSCL}, conf::Dict, context::Dict)
 end
 
 function build_scheme(::Val{:Upwind}, conf::Dict, context::Dict)
-    T = context[:Type]::DataType
+    T = context[:T]::DataType
     D = context[:D]::Int
     M = context[:M]::Int
     
@@ -37,7 +50,7 @@ function build_scheme(::Val{:Upwind}, conf::Dict, context::Dict)
 end
 
 function build_scheme(::Val{:Central}, conf::Dict, context::Dict)
-    T = context[:Type]::DataType
+    T = context[:T]::DataType
     D = context[:D]::Int
     M = context[:M]::Int
     
@@ -48,7 +61,7 @@ function build_scheme(::Val{:Central}, conf::Dict, context::Dict)
 end
 
 function build_scheme(::Val{:WENO}, conf::Dict, context::Dict)
-    T = context[:Type]::DataType
+    T = context[:T]::DataType
     D = context[:D]::Int
     M = context[:M]::Int
     
@@ -58,12 +71,3 @@ function build_scheme(::Val{:WENO}, conf::Dict, context::Dict)
     return WENO(T, D, M, order; div_order=div_order)
 end
 
-# --- Flux Builder ---
-function build_flux(flux_conf::Dict, context::Dict)
-    name = flux_conf[:name]::Symbol
-    return build_flux(Val(name), flux_conf, context)
-end
-
-build_flux(name::Val, conf::Dict, context::Dict) = error("Unknown Flux: $(typeof(name))")
-build_flux(::Val{:Rusanov}, conf::Dict, context::Dict) = RusanovFlux()
-build_flux(::Val{:Upwind}, conf::Dict, context::Dict)  = UpwindFlux()

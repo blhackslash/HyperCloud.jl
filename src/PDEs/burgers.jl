@@ -1,5 +1,11 @@
 export BurgersEquation
 
+"""
+    BurgersEquation{D, T} <: HyperbolicPDE{D, 1, T}
+
+Implements the multi-dimensional inviscid Burgers' equation. 
+The system mathematically enforces a strictly scalar state vector (`M = 1`) across any spatial dimension `D`.
+"""
 struct BurgersEquation{D, T} <: HyperbolicPDE{D, 1, T} end
 
 @inline prim2cons(::BurgersEquation, u::State) = u
@@ -15,13 +21,6 @@ end
 
 # Returns the localized Jacobian (u) as a strict 1x1 SMatrix
 @inline velocity(eq::BurgersEquation, u::State{1, T}, d::Int) where {T} = SMatrix{1, 1, T, 1}(u[1])
-
-function build_equation(::Val{:burgers}, pde_conf::Dict, context::Dict)
-    T = context[:Type]::DataType
-    D = pde_conf[:D]::Int
-    
-    return BurgersEquation{D, T}()
-end
 
 # Generic fallback for t=0 or unhandled ICs
 analytic_closure(eq::BurgersEquation{D}, ic::InitialCondition, params::ParamDict) where {D} = (st::SVector) -> ic(SVector{D, Float64}(ntuple(d -> st[d], Val(D))))

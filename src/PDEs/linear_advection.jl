@@ -1,5 +1,17 @@
 export LinearAdvection
-# Notice the addition of the L parameter in the struct and the vel field
+
+"""
+    LinearAdvection{D, M, T, L} <: HyperbolicPDE{D, M, T}
+
+Implements N-dimensional, M-variable coupled linear advection systems. 
+
+# Fields
+- `vel::Velocity{D, M, T, L}`: The constant advective velocity matrices for each spatial dimension.
+- `max_eigs::SVector{D, T}`: The precomputed spectral radius (maximum absolute eigenvalue) for each spatial matrix, used to optimize runtime execution.
+
+# Constructors
+- `LinearAdvection(velocities, ::Type{T}=eltype(velocities[1]))`: Automatically extracts the spatial dimension `D` and system size `M` from the provided velocity matrices and precomputes the exact spectral radii.
+"""
 struct LinearAdvection{D, M, T, L} <: HyperbolicPDE{D, M, T}
     vel::Velocity{D, M, T, L}
     max_eigs::SVector{D, T}
@@ -38,13 +50,6 @@ end
 # Fulfill the core API for kinetic relaxation speeds
 @inline function kinetic_wave_speed(eq::LinearAdvection{D, NK, T}, d::Int, k::Int) where {D, NK, T}
     return eq.vel[d][k,k]
-end
-
-function build_equation(::Val{:linear}, pde_conf::Dict, context::Dict)
-    T = context[:Type]::DataType
-    
-    # We pass T securely, and the smart constructor utilizes param2vel internally
-    return LinearAdvection(pde_conf[:velocities], T) 
 end
 
 # ---------------------------------------------------------

@@ -30,3 +30,4 @@ The module includes a universal analytic closure capable of resolving the exact 
 
 ```@docs
 LinearAdvection
+```

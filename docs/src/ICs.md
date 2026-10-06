@@ -22,7 +22,6 @@ The application of these conditions is handled universally by `set_initial_condi
 ```@docs
 InitialCondition
 set_initial_conditions!
-build_ic
 Box
 Gauss
 QRiemann

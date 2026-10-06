@@ -3,7 +3,12 @@ export build_weights
 # =========================================================================
 # MODULAR WEIGHT BUILDER
 # =========================================================================
+"""
+    build_weights(weight_conf::Dict, context::Dict)
 
+Constructs the meshfree Moving Least Squares (MLS) weight function.
+Requires a `:name` (e.g., `:exponential` or `:inverse`), an interpolation `:range` scalar, and an `:alpha` parameter. Computes the absolute interpolation range dynamically by multiplying the requested `:range` with the `max_dx` extracted from the execution context.
+"""
 function build_weights(weight_conf::Dict, context::Dict)
     if !haskey(weight_conf, :name)
         error("Weight configuration must include a strictly typed :name Symbol (e.g., :exponential, :inverse).")
@@ -15,7 +20,7 @@ function build_weights(weight_conf::Dict, context::Dict)
     weight_name = weight_conf[:name]::Symbol
     
     # Extract dependencies from the context
-    T = context[:Type]::DataType
+    T = context[:T]::DataType
     max_dx = context[:max_dx]::T
     
     # Compute the absolute interpolation range directly in the weight builder
@@ -26,11 +31,18 @@ function build_weights(weight_conf::Dict, context::Dict)
 end
 
 # Generic fallback
+"""
+    build_weights(name::Val, weight_conf::Dict, context::Dict)
+
+Generic fallback for custom meshfree MLS weight functions.
+Users can extend this by defining `build_weights(::Val{:my_weight}, ...)`.
+Requires a `:range` scalar and an `:alpha` parameter, computing the absolute interpolation range dynamically by multiplying the requested `:range` with `max_dx` from the execution context.
+"""
 build_weights(name::Val, weight_conf::Dict, context::Dict) = error("Unknown weight function: $(typeof(name))")
 
 # --- Specific Weight Builders ---
 function build_weights(::Val{:exponential}, weight_conf::Dict, context::Dict)
-    T = context[:Type]::DataType
+    T = context[:T]::DataType
     interp_range = context[:interp_range]::T
     
     # Explicitly require alpha (no defaults!)
@@ -39,7 +51,7 @@ function build_weights(::Val{:exponential}, weight_conf::Dict, context::Dict)
 end
 
 function build_weights(::Val{:inverse}, weight_conf::Dict, context::Dict)
-    T = context[:Type]::DataType
+    T = context[:T]::DataType
     interp_range = context[:interp_range]::T
     
     # Explicitly require alpha (no defaults!)

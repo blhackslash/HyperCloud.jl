@@ -1,5 +1,17 @@
 export EulerEquation
 
+"""
+    EulerEquation{D, M, T, R} <: HyperbolicPDE{D, M, T}
+
+Implements the compressible Euler equations for ideal gases. 
+
+# Fields
+- `gamma::T`: The specific heat ratio of the gas.
+- `rep::R`: The equation representation (e.g., `Conservative` or `NCRepresentation`).
+
+# Constructors
+- `EulerEquation(::Val{D}, ::Type{T}, gamma::T = T(1.4), rep::R = Conservative())`: Automatically configures the system for spatial dimension `D` and sets the state vector length to `M = D + 2`.
+"""
 struct EulerEquation{D, M, T, R} <: HyperbolicPDE{D, M, T}
     gamma::T
     rep::R
@@ -68,16 +80,6 @@ end
     c = sqrt(eq.gamma * p / rho)
     
     return abs(u_d) + c
-end
-
-function build_equation(::Val{:euler}, pde_conf::Dict, context::Dict)
-    T = context[:Type]::DataType
-    D = pde_conf[:D]::Int
-    rep = parse_representation(pde_conf)
-    
-    gamma = T(pde_conf[:gamma])
-    
-    return EulerEquation(Val(D), T, gamma, rep)
 end
 
 # =========================================================================

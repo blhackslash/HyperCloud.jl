@@ -5,6 +5,7 @@ makedocs(;
     modules=[HyperCloud],
     authors="Pascal Jung", # Update with your desired author name
     sitename="HyperCloud.jl",
+    checkdocs = :exports, 
     format=Documenter.HTML(;
         prettyurls=get(ENV, "CI", "false") == "true",
         canonical="https://blhackslash.github.io/HyperCloud.jl",
@@ -14,6 +15,10 @@ makedocs(;
     pages=[
         "Home" => "index.md",
         "Examples" => "examples.md",
+        "Execution Macros" => "macros.md",
+        "Simulation Engine" => "simulation.md",
+        "Time Integration" => "time_integration.md",
+        "Initial Conditions" => "ICs.md",
         "PDEs" => [
             "Architecture" => "PDEs/main.md",
             "Linear Advection" => "PDEs/advection.md",
@@ -23,11 +28,8 @@ makedocs(;
         "Source Terms" => [
             "Kinetic Relaxation" => "SourceTerms/kinetic.md",
         ],
-        "Initial Conditions" => "ICs.md",
-        "Simulation Engine" => "simulation.md",
-        "Time Integration" => "time_integration.md",
-        "Execution Macros" => "macros.md",
         "Convenience Wrappers" => "wrappers.md",
+        "Builder API" => "builder.md",
     ],
 )
 

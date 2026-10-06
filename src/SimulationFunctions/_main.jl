@@ -1,8 +1,9 @@
+export extract_namespace
+
 """
     extract_namespace(params::Dict, prefix::Symbol; separator::String="_")
 
-Extracts keys starting with `prefix` followed by `separator`. 
-Leaves the values exactly as they are (preserving tuples for hashing).
+Extracts all keys from a dictionary that start with the given `prefix` followed by the `separator` (e.g., `PDE_name`). Leaves the values exactly as they are (preserving tuples for hashing) and returns a new dictionary with the stripped keys.
 """
 function extract_namespace(params::Dict, prefix::Symbol; separator::String="_")
     prefix_str = string(prefix) * separator
