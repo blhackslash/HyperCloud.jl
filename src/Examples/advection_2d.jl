@@ -19,7 +19,7 @@ function advection_2d()
             
             # Grid & Domain Namespace
             :Grid_domain => :rectangular,
-            :Grid_Ns => (100,100), 
+            :Grid_Ns => (50,50), 
             :Grid_mins => (-5.0,-5.0), 
             :Grid_maxs => (5.0,5.0),
             :Grid_periodic => true,

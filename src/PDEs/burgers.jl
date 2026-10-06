@@ -73,28 +73,6 @@ function analytic_closure(eq::BurgersEquation{D, T}, ic::Gauss, geom::GeometricD
     end
 end
 
-# 1D Sine
-function analytic_closure(eq::BurgersEquation{1, T}, ic::Sine, geom::GeometricDomain) where {T}
-    tol = T(1e-10)
-    max_iter = 100
-    return function exact_burgers_sine(st::SVector)
-        t = T(st[end])
-        x = T(st[1])
-        pos = SVector{1, T}(x)
-        
-        if t <= T(1e-12); return ic(pos); end
-        
-        u_curr = ic(pos)[1]
-        
-        for _ in 1:max_iter
-            u_next = ic.a[1] * sin(T(2.0 * pi) * (x - u_curr * t) / ic.period[1]) + ic.c_offset[1]
-            if abs(u_next - u_curr) < tol; return SVector{1, T}(u_next); end
-            u_curr = u_next
-        end
-        return SVector{1, T}(u_curr)
-    end
-end
-
 # 1D Riemann
 function analytic_closure(eq::BurgersEquation{1, T}, ic::Union{Riemann, SRiemann}, geom::GeometricDomain) where {T}
     x0 = ic.p0[1]
