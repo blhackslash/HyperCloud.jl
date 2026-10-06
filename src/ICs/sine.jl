@@ -1,6 +1,6 @@
 export Sine
 
-struct Sine{D, M} <: SmoothInitialCondition
+struct Sine{D, M} <: InitialCondition
     a::State{M}
     period::Space{D}
     c_offset::State{M}

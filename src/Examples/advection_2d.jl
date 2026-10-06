@@ -1,5 +1,5 @@
-export advection_1d
-function advection_1d()
+export advection_2d
+function advection_2d()
     varied_params = create_varied_dict()
     # Ensure parameter variations use the updated flattened namespace keys
     push!(varied_params, :Grid_seed => [10, 100, 1000, 10000]) 
@@ -19,11 +19,11 @@ function advection_1d()
             
             # Grid & Domain Namespace
             :Grid_domain => :rectangular,
-            :Grid_Ns => (1000,), 
-            :Grid_mins => (-5.0,), 
-            :Grid_maxs => (5.0,),
+            :Grid_Ns => (100,100), 
+            :Grid_mins => (-5.0,-5.0), 
+            :Grid_maxs => (5.0,5.0),
             :Grid_periodic => true,
-            :Grid_randomness_factor => (0.2,),
+            :Grid_randomness_factor => (0.2,0.2),
             :Grid_seed => 42,
             :Grid_mover => :none,
             
@@ -35,12 +35,12 @@ function advection_1d()
             # IC Namespace
             :IC_name => :gauss,
             :IC_a => (1.0,),
-            :IC_b => (0.0,),
+            :IC_b => (0.0,0.0),
             :IC_width => 1.0,
             
             # PDE Namespace
             :PDE_name => :linear, 
-            :PDE_velocities => ((1.0,),), 
+            :PDE_velocities => ((1.0,),(1.0,)), 
 
             :Scheme_MLS_order => 2,
         ),

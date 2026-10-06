@@ -303,12 +303,17 @@ end
         @test true
     end
 
-    @testset "Examples" begin
-        @sim advection_1d
-        @test true
-        @sim burgers_kinetic
-        @test true
-        @sim euler_1d_sod
-        @test true
-    end
+end
+
+using PDEStudio
+using GLMakie
+
+@testset "Examples" begin
+    @sim advection_2d
+    @test true
+    @sim burgers_kinetic
+    @test true
+    @plot euler_1d_sod
+    @test true
+    reset_plotter!()
 end

@@ -1,6 +1,6 @@
 export Gauss
 
-struct Gauss{D, M} <: SmoothInitialCondition
+struct Gauss{D, M} <: InitialCondition
     a::State{M}
     b::Space{D}
     width::Float64

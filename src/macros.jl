@@ -63,8 +63,7 @@ function _get_user_project_root(mod::Module)
         return CONFIG_ROOT_OVERWRITE[]
     end
     
-    root = pkgdir(mod)
-    return isnothing(root) ? pwd() : root
+    root = get_save_path()
 end
 
 """

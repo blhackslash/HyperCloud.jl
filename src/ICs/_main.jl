@@ -1,7 +1,6 @@
-export InitialCondition, SmoothInitialCondition, set_initial_conditions!, build_ic
+export InitialCondition, set_initial_conditions!, build_ic
 
 abstract type InitialCondition end
-abstract type SmoothInitialCondition <: InitialCondition end
 
 function set_initial_conditions!(pg::ParticleGrid{D, M}, eq::HyperbolicPDE, IC::InitialCondition) where {D, M}
     positions = pg.core.positions
