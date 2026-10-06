@@ -36,4 +36,5 @@ makedocs(;
 deploydocs(;
     repo="github.com/blhackslash/HyperCloud.jl",
     devbranch="main",
+    push_preview = true,
 )
