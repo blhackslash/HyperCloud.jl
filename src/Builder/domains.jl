@@ -46,8 +46,8 @@ Requires a `:domain` key unless a pre-instantiated `GeometricDomain` is passed v
 """
 function build_domain(domain_conf::Dict, context::Dict)
     # Direct pass-through if the user supplied an already-instantiated GeometricDomain
-    if haskey(domain_conf, :instance) && domain_conf[:instance] isa GeometricDomain
-        return domain_conf[:instance]
+    if domain_conf[:domain] isa GeometricDomain
+        return domain_conf[:domain]
     end
     
     if !haskey(domain_conf, :domain)
