@@ -95,11 +95,11 @@ function get_master_method_dict()
         create_method(:RK2, :MUSCL,  2, limiter=:VK, limiter_mode=:hard, ignore=ignore_relax),
         create_method(:RK2, :MUSCL,  2, limiter=:BJ, limiter_mode=:hard, ignore=ignore_relax),
         create_method(:RK2, :MUSCL,  2, limiter=:minmod, limiter_mode=:hard, ignore=ignore_relax),
-        create_method(:RK2, :MUSCL,  2, mood_criterion=:U2, mood_strategy=:EPD0, ignore=ignore_relax),
-        create_method(:RK2, :MUSCL,  2, mood_criterion=:U2, mood_strategy=:EPD1, ignore=ignore_relax),
-        create_method(:RK2, :MUSCL,  2, mood_criterion=:U2, mood_strategy=:EPD2, ignore=ignore_relax),
-        create_method(:RK2, :MUSCL,  2, mood_criterion=:U2, mood_strategy=:SEPD0, ignore=ignore_relax),
-        create_method(:RK2, :MUSCL,  2, mood_criterion=:U1, ignore=ignore_relax),
+        create_method(:RK2, :MUSCL,  2, mood_criterion=:U2, mood_strategy=:EPD0, MOOD_delta_relax = 0., ignore=ignore_relax),
+        create_method(:RK2, :MUSCL,  2, mood_criterion=:U2, mood_strategy=:EPD1, MOOD_delta_relax = 0., ignore=ignore_relax),
+        create_method(:RK2, :MUSCL,  2, mood_criterion=:U2, mood_strategy=:EPD2, MOOD_delta_relax = 0., ignore=ignore_relax),
+        create_method(:RK2, :MUSCL,  2, mood_criterion=:U2, mood_strategy=:SEPD0, MOOD_delta_relax = 0., ignore=ignore_relax),
+        create_method(:RK2, :MUSCL,  2, mood_criterion=:U1, mood_strategy=:EPD1, MOOD_delta_relax = 0., ignore=ignore_relax),
         create_method(:RK4, :MUSCL,  4, mood_criterion=:only, ignore=ignore_relax),
 
         # =====================================================================
@@ -109,11 +109,11 @@ function get_master_method_dict()
         create_method(:ARS222, :MUSCL,  2),
         create_method(:ARS222, :MUSCL,  2, limiter=:VK, limiter_mode=:hard),
         create_method(:ARS222, :MUSCL,  2, limiter=:minmod, limiter_mode=:hard),
-        create_method(:ARS222, :MUSCL,  2, mood_criterion=:U2, mood_strategy=:EPD1),
-        create_method(:ARS222, :MUSCL,  2, mood_criterion=:U2, mood_strategy=:EPD2),
-        create_method(:ARS222, :MUSCL,  2, mood_criterion=:U2, mood_strategy=:SEPD0),
+        create_method(:ARS222, :MUSCL,  2, mood_criterion=:U2, mood_strategy=:EPD1, MOOD_delta_relax = 0.),
+        create_method(:ARS222, :MUSCL,  2, mood_criterion=:U2, mood_strategy=:EPD2, MOOD_delta_relax = 0.),
+        create_method(:ARS222, :MUSCL,  2, mood_criterion=:U2, mood_strategy=:SEPD0, MOOD_delta_relax = 0.),
         create_method(:ARS222, :MUSCL,  2, limiter=:VK, limiter_mode=:hard),
-        create_method(:ARS222, :MUSCL,  2, mood_criterion=:U1, mood_strategy=:EPD1),
+        create_method(:ARS222, :MUSCL,  2, mood_criterion=:U1, mood_strategy=:EPD1, MOOD_delta_relax = 0.),
 
         # =====================================================================
         # 4. HIGH-ORDER (RK4 Direct / ARS233 Kinetic)
@@ -121,9 +121,9 @@ function get_master_method_dict()
         (create_method(:RK4, :MUSCL, order, ignore=ignore_relax) for order in 2:5)...,
         (create_method(:RK4, :Upwind, order, ignore=ignore_relax) for order in 2:5)...,
         (create_method(:RK4, :MUSCL, order, limiter=:VK, limiter_mode=:hard, ignore=ignore_relax) for order in 2:5)...,
-        (create_method(:RK4, :MUSCL, order, mood_criterion=:U2, mood_strategy=:EPD1, ignore=ignore_relax) for order in 2:5)...,
-        (create_method(:RK4, :MUSCL, order, mood_criterion=:U2, mood_strategy=:EPD2, ignore=ignore_relax) for order in 2:5)...,
-        (create_method(:ARS233, :MUSCL, order, mood_criterion=:U2, mood_strategy=:EPD1) for order in 2:5)...,
+        (create_method(:RK4, :MUSCL, order, mood_criterion=:U2, mood_strategy=:EPD1, MOOD_delta_relax = 0., ignore=ignore_relax) for order in 2:5)...,
+        (create_method(:RK4, :MUSCL, order, mood_criterion=:U2, mood_strategy=:EPD2, MOOD_delta_relax = 0., ignore=ignore_relax) for order in 2:5)...,
+        (create_method(:ARS233, :MUSCL, order, mood_criterion=:U2, mood_strategy=:EPD1, MOOD_delta_relax = 0., ) for order in 2:5)...,
         (create_method(:RK4, :MUSCL, order, limiter=:minmod, limiter_mode=:hard, ignore=ignore_relax) for order in 2:5)...
     ]
     
