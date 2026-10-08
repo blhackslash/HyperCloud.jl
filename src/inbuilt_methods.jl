@@ -13,6 +13,7 @@ automatically assigns the correct simulation pipeline, and generates a standardi
 function create_method(timestepper::Symbol, main_gradient::Symbol, order::Int;
                        main_flux::Symbol = :Rusanov,
                        limiter::Symbol = :none,
+                       limiter_mode::Symbol = :hard,
                        mood_criterion::Symbol = :none,
                        mood_strategy::Symbol = :EPD1,
                        sim_func_name::Union{Symbol, Nothing} = nothing,
@@ -32,6 +33,7 @@ function create_method(timestepper::Symbol, main_gradient::Symbol, order::Int;
         :Scheme_order => order,
         :Flux_name => main_flux,
         :Limiter_name => limiter,
+        :Limiter_mode => limiter_mode,
         :MOOD_criterion => mood_criterion,
         :MOOD_strategy => mood_strategy,
         :sim_func_name => sim_func_name
@@ -79,17 +81,17 @@ function get_master_method_dict()
         # =====================================================================
         # 1. STABLE BASELINES (1st Order)
         # =====================================================================
-        create_method(:Euler, :Upwind, 1, ignore=ignore_relax),
-        create_method(:RK2, :Upwind, 1, ignore=ignore_relax),
-        create_method(:IMEXEuler, :Upwind, 1), 
-        create_method(:ARS222, :Upwind, 1),
-        create_method(:ARS233, :Upwind, 1),
+        create_method(:Euler, :Upwind, 1, ignore=ignore_relax, Scheme_upwind_alg_nd=:Classic),
+        create_method(:RK2, :Upwind, 1, ignore=ignore_relax, Scheme_upwind_alg_nd=:Classic),
+        create_method(:IMEXEuler, :Upwind, 1, Scheme_upwind_alg_nd=:Classic), 
+        create_method(:ARS222, :Upwind, 1, Scheme_upwind_alg_nd=:Classic),
+        create_method(:ARS233, :Upwind, 1, Scheme_upwind_alg_nd=:Classic),
         create_method(:RK2, :WENO, 2, ignore=ignore_relax),
 
         # =====================================================================
         # 2. EXPLICIT 2ND ORDER (RK2) - DIRECT
         # =====================================================================
-        create_method(:RK2, :Upwind, 2, ignore=ignore_relax),
+        create_method(:RK2, :Upwind, 2, ignore=ignore_relax, Scheme_upwind_alg_nd=:Classic),
         create_method(:RK2, :MUSCL,  2, ignore=ignore_relax),
         create_method(:RK2, :MUSCL,  1, ignore=ignore_relax),
         create_method(:RK2, :MUSCL,  2, limiter=:VK, limiter_mode=:hard, ignore=ignore_relax),
@@ -105,7 +107,7 @@ function get_master_method_dict()
         # =====================================================================
         # 3. RELAXATION 2ND ORDER (ARS222) - KINETIC
         # =====================================================================
-        create_method(:ARS222, :Upwind, 2),
+        create_method(:ARS222, :Upwind, 2, Scheme_upwind_alg_nd=:Classic),
         create_method(:ARS222, :MUSCL,  2),
         create_method(:ARS222, :MUSCL,  2, limiter=:VK, limiter_mode=:hard),
         create_method(:ARS222, :MUSCL,  2, limiter=:minmod, limiter_mode=:hard),
@@ -119,7 +121,6 @@ function get_master_method_dict()
         # 4. HIGH-ORDER (RK4 Direct / ARS233 Kinetic)
         # =====================================================================
         (create_method(:RK4, :MUSCL, order, ignore=ignore_relax) for order in 2:5)...,
-        (create_method(:RK4, :Upwind, order, ignore=ignore_relax) for order in 2:5)...,
         (create_method(:RK4, :MUSCL, order, limiter=:VK, limiter_mode=:hard, ignore=ignore_relax) for order in 2:5)...,
         (create_method(:RK4, :MUSCL, order, mood_criterion=:U2, mood_strategy=:EPD1, MOOD_delta_relax = 0., ignore=ignore_relax) for order in 2:5)...,
         (create_method(:RK4, :MUSCL, order, mood_criterion=:U2, mood_strategy=:EPD2, MOOD_delta_relax = 0., ignore=ignore_relax) for order in 2:5)...,
