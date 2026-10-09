@@ -4,6 +4,7 @@ authors:
   - family-names: "Jung"
     given-names: "Pascal"
     email: "dev@blackslash.win"
+    orcid: https://orcid.org/0009-0000-1223-4611
 title: "HyperCloud.jl: A comprehensive meshfree simulation framework for solving N-dimensional hyperbolic PDEs with high-order numerical accuracy."
 version: 0.1.0
 date-released: 2026-09-17
