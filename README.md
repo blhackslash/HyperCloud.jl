@@ -1,6 +1,6 @@
 # HyperCloud
 
-[![DOI](https://zenodo.org/badge/1385223300.svg)](https://doi.org/10.5281/zenodo.23266176)
+[![DOI](https://zenodo.org/badge/23266176.svg)](https://doi.org/10.5281/zenodo.23266176)
 [![Build Status](https://github.com/blhackslash/HyperCloud.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/blhackslash/HyperCloud.jl/actions/workflows/CI.yml)
 [![Coverage](https://codecov.io/gh/blhackslash/HyperCloud.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/blhackslash/HyperCloud.jl)
 [![Stable Docs](https://img.shields.io/badge/docs-dev-blue.svg)](https://blhackslash.github.io/HyperCloud.jl/dev/)
