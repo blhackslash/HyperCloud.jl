@@ -32,3 +32,7 @@ using HyperCloud
 # Execute the simulation headlessly
 @sim euler_1d_sod
 ```
+
+---
+
+Portions of this codebase and documentation were drafted with the assistance of large language models (LLMs). All code has been human-reviewed, verified, and tested. If you notice any inaccuracies or unexpected behavior, please open an issue.
