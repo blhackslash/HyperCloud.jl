@@ -1,27 +1,49 @@
-# Time Integration & Execution Loop
+# Time Integration
 
-The time integration module drives the physical evolution of the simulation. It handles dynamic timestep calculation, Runge-Kutta/IMEX stage execution, progress logging, and intermediate state serialization.
+[`solve_equation`](@ref) runs the time loop: it computes the step size, advances the particle
+grid with the chosen Runge–Kutta or IMEX stepper, reports progress, and stores snapshots.
 
-## The Core Orchestrator (`solve_equation`)
+## Time step
 
-The `solve_equation` function acts as the primary simulation orchestrator governing the main time-stepping loop. 
+- **Fixed:** with `is_cfl = false`, `dt` is the physical time step.
+- **CFL:** with `is_cfl = true` (`:Time_CFL` in a configuration), `dt` is a CFL number and the
+  physical step is recomputed every iteration as `dt * get_time_step(pg, eq, div_interp)`. This
+  uses the current wave speeds of the equation and the grid spacing.
 
-*   **Initialization:** It accepts the selected Runge-Kutta or IMEX time integrator (`timestepper`), the physical equation system (`eq`), the active mesh-free domain (`pg`), the final simulation time (`tmax`), and a baseline time step (`dt`).
-*   **Dynamic Time-Stepping:** If the `is_cfl` flag is true, the `dt` parameter is treated as a CFL number. The actual physical time step is then dynamically computed at each iteration using the current properties of the grid and the divergence interpolator.
-*   **Progress Tracking:** The loop supports visual progress tracking (toggled via `show_progress`), which logs the simulation's advancement and dynamically calculates an ETA formatted as HH:MM:SS based on the `progress_interval`.
-*   **Parallelization:** The orchestrator logs whether it is utilizing `@threads` or `@batch` for parallel execution during the integration steps.
-*   **Outputs:** Upon completion of the time-stepping loop, the function returns a tuple containing the position history, state history, time history, total simulation steps (`k_step`), and the total elapsed wall time.
+The last step is shortened so the run ends exactly at `tmax`.
 
-## State Archiving (`saveData!`)
+## Snapshots
 
-To generate actionable output without overwhelming system memory, the framework periodically extracts the simulation state across a user-defined number of `snapshots`. This is handled exclusively by the `saveData!` function.
+`snapshots + 1` states are stored, at the target times `range(0, tmax, length = snapshots + 1)`.
 
-*   **Time Logging:** It records the exact current simulation time into the `ts_storage` array for the specific snapshot index.
-*   **Memory Allocation:** The function allocates new continuous state and position vectors for the targeted snapshot.
-*   **Ghost Particle Filtering:** If the `remove_ghosts` flag is set to true, the function actively filters out boundary particles and saves only the active domain core. 
-*   **Unfiltered Archiving:** If `remove_ghosts` is false, it copies the corresponding views for the entire particle grid into the storage arrays.
+- Snapshot 1 is the initial state at `t = 0`.
+- Each further snapshot is taken at the end of the first step that reaches its target time,
+  so `t[k]` can lie slightly after the target.
+- The final state is always stored in the last slot.
 
-## Documentation
+[`saveData!`](@ref) copies positions and states into new arrays, so later steps do not modify
+stored snapshots. With `remove_ghosts = true` only non-boundary particles are kept. The runners
+pass `:remove_ghosts` from the configuration (default `true`); `solve_equation` itself defaults
+to `false`.
+
+## Progress output
+
+- `show_progress = true`: a progress bar.
+- `show_progress = false`: an `@info` line with the percentage and an ETA (HH:MM:SS) every
+  `progress_interval` seconds, which is better suited for log files.
+
+The runners take both settings from global switches: `enable_progress_bar!(false)` and
+`set_progress_interval!(seconds)`.
+
+The loop also logs whether parallel loops use `@threads` or `@batch`.
+
+## Return value
+
+`solve_equation` returns `(positions, states, times, k_step, elapsed_time)`: the stored
+positions, states and times per snapshot, the number of steps, and the wall-clock time of the
+loop in seconds.
+
+## API
 
 ```@docs
 solve_equation

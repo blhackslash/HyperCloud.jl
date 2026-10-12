@@ -3,7 +3,7 @@ export InitialCondition, set_initial_conditions!, build_ic
 """
     InitialCondition
 
-Abstract base type for all initial condition functors in the framework. 
+Abstract base type for all initial condition functors in the framework.
 Functors derived from this type evaluate the starting state of the physical system at a given spatial coordinate.
 """
 abstract type InitialCondition end
@@ -14,35 +14,37 @@ abstract type InitialCondition end
 
 Evaluates the initial condition functor and applies it to the particle grid.
 
-- **Direct Formulation:** Iterates over the grid and evaluates the `IC` functor for each spatial position, assigning the exact physical state to `pg.rhos`[cite: 35].
-- **Kinetic Formulation:** Accepts a macroscopic `InitialCondition` and a `RelaxationSourceTerm`. It evaluates the macroscopic state and physical fluxes at each coordinate, and directly initializes the particles into the kinetic Maxwellian equilibrium state component-by-component[cite: 13].
+- **Direct formulation:** evaluates `IC` at every particle position and assigns the physical state to `pg.rhos`.
+- **Kinetic formulation:** evaluates the macroscopic state and physical fluxes at every particle and initializes
+  the kinetic variables directly in the Maxwellian equilibrium, component by component.
 """
 function set_initial_conditions!(pg::ParticleGrid{D, M}, eq::HyperbolicPDE, IC::InitialCondition) where {D, M}
     positions = pg.core.positions
-    
+
     @inbounds for i in 1:pg.meta.N
-        # Strict assignment: IC(pos) must return an State{M}
+        # Strict assignment: IC(pos) must return a State{M}
         pg.rhos[i] = IC(positions[i])
     end
     return nothing
 end
 
 """
-    build_ic(params::ParamDict, D::Int, ::Type{T}) where {T}
+    build_ic(ic_conf::Dict, context::Dict)
 
-Reads the parameters dict and dispatches to the correct IC builder using `Val`.
+Reads the `:IC` namespace and dispatches to the matching builder via `Val(ic_conf[:name])`.
+Extend it by defining `build_ic(::Val{:my_ic}, conf::Dict, ctx::Dict)`.
 """
 function build_ic(ic_conf::Dict, context::Dict)
     if !haskey(ic_conf, :name)
         error("Initial Condition configuration must include a strictly typed :name Symbol (e.g., :gauss, :box).")
     end
-    
+
     ic_name = ic_conf[:name]::Symbol
     return build_ic(Val(ic_name), ic_conf, context)
 end
 
 # Fallback error for missing implementations
-build_ic(name::Val, p, D::Int, ::Type{T}) where {T} = error("Unknown initFunc name: $(typeof(name))")
+build_ic(name::Val, conf::Dict, ctx::Dict) = error("Unknown initial condition: $(typeof(name))")
 
 include("box.jl")
 include("gauss.jl")

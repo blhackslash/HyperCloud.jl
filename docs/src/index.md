@@ -1,29 +1,81 @@
-# HyperCloud.jl Documentation
+# HyperCloud.jl
 
-**HyperCloud.jl** is an advanced meshfree simulation framework designed to solve arbitrary hyperbolic conservation laws. Powered by a high-performance, physics-agnostic mathematical engine, HyperCloud provides a complete computational environment. It combines dynamic particle topologies with high-order spatial approximations—including moving-least-squares MUSCL reconstruction and Multi-Dimensional Optimal Order Detection (MOOD)—controlled entirely through a streamlined, macro-driven execution workflow.
+**HyperCloud.jl** is a meshfree framework for hyperbolic conservation laws. It solves PDEs
+on particle clouds with moving-least-squares (MLS) reconstructions: first-order upwind, MUSCL
+up to fifth order, and WENO. Slope limiters and a posteriori MOOD limiting keep shocks stable.
+A kinetic relaxation pipeline with IMEX time stepping approximates nonlinear systems by linear
+transport plus a stiff source term.
 
-HyperCloud integrates natively with the **PDEStudio** ecosystem to deliver a frictionless research pipeline from computation to visualization. All simulation outputs are rigorously managed and serialized via `PDEStudioCore.jl`, providing reproducible, cryptographically hashed disk caching and highly optimized statistical integration. For visual analysis, HyperCloud interfaces directly with `PDEStudio.jl`, allowing you to instantly route your meshfree Lagrangian datasets to a high-performance local renderer (`GLMakie`) or serve interactive web visualizations directly from a headless compute node to your browser (`WGLMakie` via Bonito).
+HyperCloud is part of the **PDEStudio** ecosystem:
 
----
+- `HyperCloudCore.jl` provides the numerical engine (particle grids, interpolators, time
+  steppers, boundary conditions).
+- `PDEStudioCore.jl` runs batches of simulations, caches results on disk under a hash of
+  their parameters, and computes error statistics.
+- `PDEStudio.jl` plots the results, either locally (`GLMakie`) or in the browser from a
+  headless machine (`WGLMakie` + Bonito).
 
-## Project Architecture
+## A first simulation
 
-The framework is highly modular, separating the physical modeling from the numerical execution. 
+A simulation is a function returning a `SimulationConfig`: shared parameters, a dictionary of
+numerical methods, and the methods to run.
 
-*   **`PDEs/` & `SourceTerms/`**: House the concrete physical definitions. Users define custom mathematical equations (e.g., N-dimensional Euler, Linear Advection) and volumetric source terms here, which natively plug into the solver backend.
-*   **`ICs/`**: Provides a library of composable initial condition functors, such as N-dimensional Riemann problems, Gaussian pulses, Box distributions, and sinusoidal waves.
-*   **`Builder/` & `inbuilt_methods.jl`**: Manage configuration and assembly. The Builder translates flat, user-friendly configuration dictionaries into strictly typed `SimulationConfig` objects, while `inbuilt_methods.jl` defines pre-configured numerical schemes (e.g., Upwind, MUSCL with varying EPD MOOD strategies and a priori limiters).
-*   **`SimulationFunctions/` & `time_integration.jl`**: Form the core execution engine. These modules orchestrate the main simulation loops, geometric boundary condition application, and time marching via explicit or IMEX Runge-Kutta stages.
-*   **`macros.jl`**: Exposes the user-facing execution API (`@sim`, `@plot`, and `@backup`), enabling rapid simulation dispatch and seamless fallback to dynamic plugin loading.
-*   **`Examples/`**: Contains standard, ready-to-run benchmark configurations (such as the Sod Shock Tube or Double Mach Reflection) demonstrating the framework's capabilities.
+```julia
+using HyperCloud
 
----
+function my_advection()
+    shared = Dict{Symbol, Any}(
+        :sim_func_name => :run_direct_simulation,
+        :tmax => 1.0, :snapshots => 20,
 
-## Core Workflow
+        :PDE_name => :linear, :PDE_velocities => ((1.0,),),   # u_t + u_x = 0
 
-Running a simulation in HyperCloud requires zero boilerplate. Users define a setup function returning a `SimulationConfig` and utilize the macro API to execute it:
+        :Grid_domain => :rectangular, :Grid_mins => (0.0,), :Grid_maxs => (1.0,),
+        :Grid_Ns => (200,), :Grid_periodic => true,
+        :Grid_randomness_factor => (0.2,), :Grid_seed => 42, :Grid_mover => :none,
 
-1.  **Define the Physics:** Create a configuration function specifying the geometry, boundary conditions, initial states, and selected numerical schemes.
-2.  **Execute & Cache:** Run `@sim my_config` in the REPL. HyperCloud will automatically construct the grids, execute the time integration, and securely cache the serialized data via PDEStudioCore.
-3.  **Visualize:** Run `@plot my_config` to launch the interactive PDEStudio GUI, instantly mapping your multidimensional meshfree data onto visual primitives.
-4.  **Archive:** Use `@backup my_config` to save a timestamped copy of your exact configuration file, ensuring absolute reproducibility for publications.
+        :Weight_name => :exponential, :Weight_alpha => 1.0, :Weight_range => 5.5,
+
+        :IC_name => :gauss, :IC_a => (1.0,), :IC_b => (0.5,), :IC_width => 0.1,
+
+        :Time_CFL => 0.2,
+    )
+
+    methods = Dict{Symbol, Dict{Symbol, Any}}(
+        :analytical_solution => Dict{Symbol, Any}(),
+        :RK2MUSCL2 => last(create_method(:RK2, :MUSCL, 2)),
+        :RK4MUSCL4 => last(create_method(:RK4, :MUSCL, 4)),
+    )
+
+    return SimulationConfig(shared, methods, [:analytical_solution, :RK2MUSCL2, :RK4MUSCL4];
+                            ref_func_name = :analytical_solution)
+end
+
+@sim my_advection     # run and cache
+@plot my_advection    # open the interactive viewer (needs PDEStudio and a Makie backend)
+```
+
+Every available key is listed in the [Configuration Reference](configuration.md).
+
+## Workflow
+
+1. **Configure.** Write a function returning a `SimulationConfig`, either in your script or as
+   `name.jl` in one of the `CONFIG_SEARCH_PATHS` folders (see [Execution Macros](macros.md)).
+2. **Run.** `@sim name` builds and runs every active method and caches the results.
+3. **Visualize.** `@plot name` loads the configuration into the PDEStudio GUI.
+4. **Archive.** `@backup name` copies the configuration file into a timestamped `backups` folder.
+
+## Package layout
+
+| Folder / file | Content |
+|:--------------|:--------|
+| `PDEs/` | Equation definitions (linear advection, Burgers, Euler) and their exact solutions. |
+| `SourceTerms/` | Source terms, currently the kinetic relaxation term. |
+| `ICs/` | Initial conditions: Gaussian pulse, box, sine wave and three Riemann variants. |
+| `Builder/` | `build_*` functions that turn a flat parameter dictionary into solver components. |
+| `inbuilt_methods.jl` | [`create_method`](@ref), [`get_master_method_dict`](@ref), [`generate_relax_params`](@ref). |
+| `SimulationFunctions/` | The pipelines [`run_direct_simulation`](@ref) and [`run_kinetic_simulation`](@ref). |
+| `time_integration.jl` | The time loop [`solve_equation`](@ref) and snapshot storage. |
+| `reference.jl` | [`analytical_solution`](@ref) and the [`analytic_closure`](@ref) interface. |
+| `macros.jl` | [`@sim`](@ref), [`@plot`](@ref), [`@backup`](@ref). |
+| `Examples/` | Ready-to-run benchmarks: `euler_1d_sod`, `burgers_kinetic`, `advection_2d`. |

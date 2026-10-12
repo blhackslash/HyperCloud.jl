@@ -1,50 +1,68 @@
 # Execution Macros
 
-The execution macros form the primary user interface of the HyperCloud framework, eliminating boilerplate code and seamlessly handling module scopes, dynamic plugin loading, and world-age resolution.
+The macros are the main user interface. They resolve a configuration by name, run it, and
+handle plugin loading and world-age issues for you.
 
-## Global Configuration Variables
+## Global settings
 
-The macro system is governed by several global `Ref` variables that dictate file search paths and plotting behavior:
+| Variable | Meaning |
+|:---------|:--------|
+| `CONFIG_SEARCH_PATHS` | Folders searched recursively for `name.jl` (default `["configs", "experiments"]`). |
+| `CONFIG_ROOT_OVERWRITE` | Project root for that search. Defaults to `PDEStudioCore.get_save_path()`. |
+| `BONITO_LISTEN_URL`, `BONITO_LISTEN_PORT`, `BONITO_PROXY_URL` | Server settings for browser plots with `WGLMakie`. |
 
-*   `CONFIG_SEARCH_PATHS`: A vector of folders (default: `["configs", "experiments"]`) where the macro recursively searches for configuration scripts.
-*   `CONFIG_ROOT_OVERWRITE`: An explicit override for the project root directory. The default is `PDEStudioCore.get_save_path()`.
-*   `BONITO_LISTEN_URL`, `BONITO_LISTEN_PORT`, `BONITO_PROXY_URL`: Network configurations for hosting interactive WGLMakie plots via a headless Bonito server.
+All of them are `Ref`s, e.g. `HyperCloud.CONFIG_SEARCH_PATHS[] = ["my_cases"]`.
 
-## Macro API
-
-### `@sim`
+## `@sim`
 
 ```julia
 @sim name
+@sim "name"
+@sim :name
 ```
 
-The core execution macro. It triggers the construction and integration of the simulation configuration.
+Runs the configuration returned by `name()`:
 
-1.  **Scope Resolution:** It first checks if the function `name` exists in the local module scope.
-2.  **Plugin Fallback:** If not found locally, it recursively searches the user's `CONFIG_SEARCH_PATHS` for a file named `name.jl`, loads it dynamically via `Base.include`, and executes the returned `SimulationConfig`.
-3.  **World Age Resolution:** It uses `Base.invokelatest` to bypass Julia's strict world-age limitations, ensuring dynamically loaded plugins compile and execute flawlessly.
+1. If a function `name` exists in the calling module, it is used.
+2. Otherwise the macro searches `CONFIG_SEARCH_PATHS` for `name.jl`, includes it, and calls the
+   function of the same name.
+3. The call goes through `Base.invokelatest`, so functions defined by a freshly included file
+   work in the same session.
 
-### `@plot`
+If neither exists, `@sim` throws an `ErrorException`.
+
+!!! note "Failed runs do not abort a batch"
+    The simulation runners catch exceptions, log them with `@error`, and return `nothing`.
+    A batch therefore continues past a failing method; check the log for errors.
+
+## `@plot`
 
 ```julia
-@plot()
+@plot
 @plot name
 ```
 
-The plotting macro bridges the computational backend with the interactive `PDEStudio` visualization frontend.
+Opens the PDEStudio viewer. With `name`, the configuration is resolved like in `@sim`, passed
+to the viewer with `set_sim_config!`, and computed (or loaded from cache).
 
-*   **Backend Activation:** The `_launch_and_display_plotter` helper dynamically detects if `GLMakie` or `WGLMakie` is loaded in the calling module. If `WGLMakie` is active, it automatically configures a Bonito server to serve the interactive plots over the network.
-*   **Execution:** When called with `name`, it resolves the configuration exactly like `@sim`, injects it into the PDEStudio UI via `set_sim_config!`, and forces an immediate visual update.
+The backend is chosen from what is loaded in the calling module:
 
-### `@backup`
+- `GLMakie`: a local window.
+- `WGLMakie`: plots are served by a Bonito server (configured once per session with the
+  `BONITO_*` settings). If Bonito itself is not loaded, a warning is printed.
+- Neither: a warning is printed and the figure is returned without being displayed.
+
+## `@backup`
 
 ```julia
 @backup name
 ```
 
-Ensures exact reproducibility. It locates the source file where `name` is defined and explicitly copies it into a timestamped `backups` subdirectory.
+Copies the file that defines `name` into a `backups` folder next to it, with a timestamp in the
+file name (`name_YYYYMMDD_HHMMSS.jl`). Use it to archive the exact configuration behind a
+result.
 
-## Documentation
+## API
 
 ```@docs
 @sim

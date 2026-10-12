@@ -9,7 +9,8 @@ Defines a multi-dimensional quadrant Riemann problem that partitions the domain 
 - `u_states::NTuple{N_states, State{M}}`: A tuple of constant physical states corresponding to each spatial quadrant.
 - `p0::Space{D}`: The central intersection point of the quadrants.
 
-Uses a binary encoding strategy along each spatial axis to dynamically map a given coordinate to its respective state index.
+The state index is `1 + Σ_d 2^(d-1) * (pos[d] >= p0[d])`, so `u_states` must hold `2^D`
+states ordered by binary encoding. In 2D: `(bottom-left, bottom-right, top-left, top-right)`.
 """
 struct QRiemann{D, M, N_states} <: InitialCondition
     u_states::NTuple{N_states, State{M}} 

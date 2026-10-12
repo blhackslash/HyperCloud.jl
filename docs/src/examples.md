@@ -1,48 +1,66 @@
-# Included Examples & Quick Start
+# Examples
 
-HyperCloud ships with a suite of standard benchmark configurations demonstrating the framework's capabilities across different physical systems, grid topologies, and numerical schemes. 
+HyperCloud ships with benchmark configurations covering the three built-in equations and both
+simulation pipelines.
 
-## Quick Start Tutorial
+## Running an example
 
-To run any of the built-in examples, you only need to load the framework alongside a Makie backend and the `PDEStudio` visualization suite. 
-
-To execute the simulation and instantly visualize the results in an interactive window, use the `@plot` macro with the uncalled example function name:
+Pass the example function, uncalled, to a macro:
 
 ```julia
 using HyperCloud
 using PDEStudio
-using GLMakie # Or WGLMakie for browser-based rendering
+using GLMakie          # or WGLMakie for browser-based rendering
 
-# Launch the interactive plotter for the 1D Sod Shock Tube
-@plot euler_1d_sod
+@plot euler_1d_sod     # run (or load from cache) and open the viewer
 ```
 
-If you want to run the simulation headlessly without visualization (e.g., for benchmarking or cluster execution), use the `@sim` macro instead:
+Without a viewer, for example on a cluster:
 
 ```julia
 using HyperCloud
 
-# Execute the simulation headlessly
 @sim euler_1d_sod
 ```
 
-## Available Benchmarks
+## Available benchmarks
 
-### 1D Sod Shock Tube (`euler_1d_sod`)
-A classic 1D Riemann problem for the Euler equations. 
-*   **Domain:** Simulates an interface separating a high-pressure left state ($\rho=1.0, u=0.0, p=1.0$) and a low-pressure right state ($\rho=0.125, u=0.0, p=0.1$).
-*   **Grid:** Resolves the domain using 330 particles bounded by a Fixed Dirichlet condition on the left and an Outflow condition on the right.
-*   **Schemes:** Compares the exact analytical solution against a 1st-order baseline (`RK2Upwind1`), a TVD limiter (`RK2MUSCL2_VK`), and high-order MOOD strategies (e.g., `RK4MUSCL4_U2_EPD1`).
+### 1D Sod shock tube (`euler_1d_sod`)
 
-### 1D Kinetic Burgers (`burgers_kinetic`)
-Demonstrates the integration of the kinetic relaxation solver applied to the 1D Burgers' equation.
-*   **Domain:** Advects a Gaussian pulse across a periodic domain using 300 particles.
-*   **Kinetic Setup:** Generates symmetric kinetic velocities with a magnitude of 2.0 and enforces a stiff kinetic relaxation parameter ($\epsilon = 10^{-6}$).
-*   **Schemes:** Directly compares a standard macroscopic explicit scheme (`RK2MUSCL2`) against the stiff kinetic IMEX formulation (`ARS222MUSCL2`).
-*   **Parameter Sweeps:** Uses a varied parameter dictionary to sweep the execution across different grid seeds (`10, 100, 1000, 10000`).
+The classic Riemann problem for the Euler equations with ``\gamma = 1.4``.
 
-### 2D Linear Advection (`advection_2d`)
-A baseline multi-dimensional transport test.
-*   **Domain:** Advects a Gaussian pulse across a 2D periodic rectangular domain using 100x100 particles.
-*   **Schemes:** Evaluates the `RK2MUSCL2` spatial reconstruction against the exact characteristic ray-tracing analytical solution.
-*   **Parameter Sweeps:** Evaluates performance and stability across varied grid randomization seeds (`10, 100, 1000, 10000`).
+- **Data:** ``(\rho, u, p) = (1, 0, 1)`` for ``x < 0`` and ``(0.125, 0, 0.1)`` for ``x > 0``,
+  given to the IC as conservative states. `SOD_LEFT` and `SOD_RIGHT` hold them.
+- **Grid:** 330 jittered particles on ``[-0.5, 0.5]``, fixed Dirichlet on the left and outflow
+  on the right, `tmax = 0.2`.
+- **Methods:** the exact solution, first-order `RK2Upwind1`, `RK2MUSCL2_VK` (Venkatakrishnan
+  limiter), and MUSCL with MOOD (`RK2MUSCL2_U2_EPD1`, `RK4MUSCL4_U2_EPD1`, plus the inactive
+  `RK2MUSCL2_U2_EPD2` and `RK2MUSCL2_U1_EPD1`).
+
+### 1D kinetic Burgers (`burgers_kinetic`)
+
+Compares a direct scheme with the kinetic relaxation formulation for Burgers' equation.
+
+- **Data:** a Gaussian pulse (`a = 1`, `width = 1`) on the periodic domain ``[-5, 5]`` with
+  300 particles, up to `tmax = 1.0`. The pulse breaks at ``t^* \approx 1.17``, so the run stays
+  in the smooth regime where the exact solution is available.
+- **Kinetic setup:** speeds ``\pm 2`` from `generate_relax_params(2.0, 1, 1)` and
+  ``\epsilon = 10^{-6}``.
+- **Methods:** `RK2MUSCL2` (direct) and `ARS222MUSCL2` (kinetic, IMEX).
+- **Sweep:** grid seeds `10, 100, 1000, 10000`.
+
+### 2D linear advection (`advection_2d`)
+
+Transport of a Gaussian pulse along the diagonal.
+
+- **Data:** velocity ``(1, 1)`` on the periodic square ``[-5, 5]^2`` with ``50 \times 50``
+  jittered particles, up to `tmax = 10` (one full period in each direction).
+- **Methods:** `RK2MUSCL2` against the exact solution from characteristic tracing.
+- **Sweep:** grid seeds `10, 100, 1000, 10000`.
+
+## Writing your own
+
+Copy one of the example functions, change the parameters, and run it with `@sim` or `@plot`.
+The [Configuration Reference](configuration.md) lists every key. Saving the function as
+`my_case.jl` in a folder listed in `CONFIG_SEARCH_PATHS` lets you call `@sim my_case` from any
+session without including the file first.

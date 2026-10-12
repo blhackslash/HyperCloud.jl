@@ -3,9 +3,9 @@ using HyperCloud
 
 makedocs(;
     modules=[HyperCloud],
-    authors="Pascal Jung", # Update with your desired author name
+    authors="Pascal Jung",
     sitename="HyperCloud.jl",
-    checkdocs = :exports, 
+    checkdocs = :exports,
     format=Documenter.HTML(;
         prettyurls=get(ENV, "CI", "false") == "true",
         canonical="https://blhackslash.github.io/HyperCloud.jl",
@@ -15,6 +15,7 @@ makedocs(;
     pages=[
         "Home" => "index.md",
         "Examples" => "examples.md",
+        "Configuration Reference" => "configuration.md",
         "Execution Macros" => "macros.md",
         "Simulation Engine" => "simulation.md",
         "Time Integration" => "time_integration.md",

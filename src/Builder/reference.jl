@@ -3,14 +3,16 @@ export analytic_closure, analytical_solution
 """
     analytical_solution(shared_params::ParamDict)
 
-Reads the shared simulation parameters, constructs the corresponding InitialCondition
-and continuous GeometricDomain, and returns a fast, standalone closure `exact_u(st)` 
-that evaluates the exact analytical solution using a unified spacetime tensor.
+Builds the equation, domain and initial condition from the `PDE`, `Grid` and `IC`
+namespaces and returns the standalone closure `exact_u(st)` from [`analytic_closure`](@ref).
+`st` is the spacetime vector `SVector(x..., t)`.
+
+The reference is computed in `shared_params[:real_type]` (default `Float64`), independently
+of the simulation precision `:T`, so Float32 runs are still compared to a Float64 reference.
 """
 function analytical_solution(shared_params::ParamDict)
-    # 1. Instantiate the PDE struct
-    # We use Float64 as the standard type for analytical solutions
-    T = get(shared_params, :real_type, Float64) 
+    # 1. Precision of the reference (independent of the simulation precision :T)
+    T = get(shared_params, :real_type, Float64)
     context = Dict{Symbol, Any}()
     context[:T] = T
 
@@ -46,7 +48,10 @@ end
 """
     analytic_closure(eq::HyperbolicPDE, ic::InitialCondition, geom::GeometricDomain)
 
-Generates an exact mathematical closure evaluating the analytical state for a given PDE, initial condition, and continuous geometric domain.
-This function serves as a generic fallback that emits a warning if no exact analytical solution has been explicitly implemented for the provided combination of physics, geometry, and initial states.
+Returns a closure `st -> State{M}` evaluating the exact solution at the spacetime point
+`st = SVector(x..., t)`. PDEs add methods for the initial conditions they can solve exactly.
+
+This generic fallback only emits a warning and returns `nothing` when no method exists for
+the combination of equation, initial condition and domain.
 """
 analytic_closure(eq::HyperbolicPDE, ic::InitialCondition, geom::GeometricDomain) = @warn "No Analytical Solution implemented for $(typeof(eq)) with $(typeof(ic)) on domain $(typeof(geom))!"

@@ -1,23 +1,64 @@
 # Initial Conditions
 
-The initial condition architecture provides a library of composable functors that evaluate the starting state of the physical system at any given spatial coordinate.
+An initial condition is a callable struct that subtypes `InitialCondition`. It takes a position
+`pos::Space{D}` and returns the state `State{M}` at that point.
 
-## Core Architecture
+[`set_initial_conditions!`](@ref) evaluates it at every particle. The kinetic pipeline uses a
+second method that maps the macroscopic state to the kinetic equilibrium (see
+[Kinetic Relaxation](SourceTerms/kinetic.md)).
 
-Initial conditions in HyperCloud are implemented as callable structs (functors) derived from the abstract type `InitialCondition`. Each functor accepts an N-dimensional position vector (`Space{D}`) and returns a strictly typed physical state vector (`State{M}`). 
+In a configuration the initial condition is selected with `:IC_name`; [`build_ic`](@ref)
+converts all `IC_` parameters to the simulation type `T`. The keys of each type are listed in
+the [Configuration Reference](configuration.md).
 
-The application of these conditions is handled universally by `set_initial_conditions!`, which iterates over the particle grid and evaluates the designated functor for each particle's spatial position. The instantiation of these structs is managed by the `build_ic` factory function, which uses dynamic `Val` dispatch based on the `:name` key in the configuration dictionary to construct the appropriate geometry.
+## Available initial conditions
 
-## Available Geometries
+| Type | `:IC_name` | State at `pos` |
+|:-----|:-----------|:---------------|
+| [`Gauss`](@ref) | `:gauss` | ``a \exp\left(-\lVert pos - b \rVert^2 / \mathrm{width}^2\right)`` |
+| [`Box`](@ref) | `:box` | `u_box` if `mins .<= pos .<= maxs` in every direction, else `u_bg` |
+| [`Sine`](@ref) | `:sine` | ``a \sin\left(2\pi \sum_d pos_d / \mathrm{period}_d\right) + c_\mathrm{offset}`` |
+| [`Riemann`](@ref) | `:riemann` | `uL` if ``(pos - p_0) \cdot n < 0``, else `uR` |
+| [`SRiemann`](@ref) | `:s_riemann` | ``\frac{u_L + u_R}{2} - \frac{u_L - u_R}{\pi} \arctan\left(\frac{(pos - p_0)\cdot n}{\mathrm{width}}\right)`` |
+| [`QRiemann`](@ref) | `:q_riemann` | `u_states[1 + Σ_d 2^(d-1) (pos_d ≥ p0_d)]` |
 
-*   **Box (`Box`):** Defines a discontinuous rectangular sub-region. Returns `u_box` if the queried position falls strictly within the defined `mins` and `maxs` boundaries, and `u_bg` otherwise.
-*   **Gaussian Pulse (`Gauss`):** Evaluates a smooth, N-dimensional Gaussian bell curve. The state is computed as $a \exp(-\frac{\Vert{}pos - b\Vert{}^2}{width^2})$, where $a$ is the amplitude state, $b$ is the spatial center, and $width$ controls the spread.
-*   **Standard Riemann (`Riemann`):** Represents a classic shock tube or half-space problem. It splits the domain using a hyperplane defined by an origin point `p0` and a normal vector `n`. Returns the left state `uL` if the dot product of the relative position and the normal is negative, and the right state `uR` otherwise.
-*   **Smoothed Riemann (`SRiemann`):** A continuous approximation of the standard Riemann problem. It utilizes an arctangent function to smoothly transition between `uL` and `uR` over a specified `width` parameter, preventing infinite gradients at the interface.
-*   **Quadrant Riemann (`QRiemann`):** Partitions the space into $2^D$ distinct orthogonal regions intersecting at a central point `p0`. It uses a binary encoding strategy based on the spatial axes to map the evaluated coordinate to one of the provided $N\_states$.
-*   **Sinusoidal Wave (`Sine`):** Evaluates a smooth, multidimensional periodic wave. The physical state is calculated as $a \sin(2\pi \sum \frac{pos}{period}) + c\_offset$.
+Notes:
 
-## API Documentation
+- **Riemann normals.** `build_ic` normalizes `n` (default ``+x``). `uL` lies on the side the
+  normal points away from.
+- **Quadrant ordering.** `QRiemann` needs `2^D` states in binary order. In 2D:
+  `(bottom-left, bottom-right, top-left, top-right)`.
+- **Precision.** `Gauss` and `SRiemann` store their parameters in the precision of the
+  amplitude/state. A Float32 configuration therefore evaluates entirely in Float32.
+
+## Adding an initial condition
+
+Define a struct, make it callable, and add a builder method:
+
+```julia
+using HyperCloud, StaticArrays
+
+struct Ring{D, M, T} <: InitialCondition
+    u_in::State{M, T}
+    u_out::State{M, T}
+    center::Space{D, T}
+    radius::T
+end
+
+(ic::Ring)(pos::Space{D}) where {D} = sum(abs2, pos - ic.center) < ic.radius^2 ? ic.u_in : ic.u_out
+
+function HyperCloud.build_ic(::Val{:ring}, conf::Dict, ctx::Dict)
+    T, D, M = ctx[:T]::DataType, ctx[:D]::Int, ctx[:M]::Int
+    return Ring(State{M, T}(Tuple(T.(conf[:u_in]))), State{M, T}(Tuple(T.(conf[:u_out]))),
+                Space{D, T}(Tuple(T.(conf[:center]))), T(conf[:radius]))
+end
+```
+
+`:IC_name => :ring` now selects it. To use it as a reference solution, add an
+[`analytic_closure`](@ref) method for the equations where it has one (see
+[PDE Architecture](PDEs/main.md)).
+
+## API
 
 ```@docs
 InitialCondition

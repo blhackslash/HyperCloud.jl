@@ -1,41 +1,62 @@
-# Simulation Execution Engine
+# Simulation Engine
 
-The simulation functions serve as the central orchestrators of the HyperCloud framework. They are responsible for translating flat configuration dictionaries into fully assembled numerical contexts, managing the initialization phase, driving the main time-stepping loop, and securely packaging the final output data.
+The runners turn a flat parameter dictionary into a complete solver, run it, and package the
+result. There are two: [`run_direct_simulation`](@ref) for the PDE itself and
+[`run_kinetic_simulation`](@ref) for its kinetic relaxation approximation.
 
-## General Orchestration Pipeline
+## Pipeline
 
-All simulation runners in HyperCloud follow a strict, modular assembly pipeline based on a unified execution context:
+Both runners follow the same steps, sharing one `context` dictionary (see
+[Builder API](builder.md)):
 
-1.  **Namespace Extraction:** The runner accepts a global `ParamDict` and uses `extract_namespace` to segregate parameters into isolated component dictionaries based on prefixes (e.g., separating `PDE_...`, `Grid_...`, `Time_...`, and `Scheme_...` keys).
-2.  **Context Assembly:** A central execution `context` dictionary is populated sequentially. The mathematical equations are built first, yielding the spatial dimensions $D$ and system size $M$.
-3.  **Geometry & Numerics:** Using the extracted namespaces, the framework builds the continuous domain, constructs the particle grid, and instantiates the spatial numerical schemes (Flux, Limiter, MOOD, and baseline Scheme).
-4.  **Time Stepping & Execution:** The temporal tableau is assembled, and the time-step size `dt` is resolved (either directly or via a `CFL` condition). The main solver loop (`solve_equation`) executes until `tmax`, tracking runtime statistics and filtering out ghost particles.
-5.  **Data Packaging:** The resulting spacetime vectors are packaged into a standardized `AbstractSimData` object, appending custom statistics like total runtime and step count.
+1. **Split the parameters** into namespaces with `extract_namespace` (`PDE`, `Grid`, `Weight`,
+   `Flux`, `Limiter`, `MOOD`, `Scheme`, `IC`, `Time`, and `Kinetic` for the kinetic runner).
+2. **Build the equation.** It determines the dimension `D` and system size `M`.
+3. **Build the geometry and particle grid**, including the MLS weight function.
+4. **Build the spatial discretization:** flux, limiter, MOOD and scheme.
+5. **Build the time stepper** from the Butcher tableau (explicit RK or IMEX).
+6. **Apply the initial condition.**
+7. **Integrate** with [`solve_equation`](@ref) up to `tmax`, using either a fixed `dt` or a CFL
+   number.
+8. **Package** the snapshots into an `AbstractSimData` and add the statistics `Runtime`
+   (wall-clock seconds) and `k_step` (number of steps).
 
----
+The simulation precision is `params[:T]` (default `Float64`).
 
-## Direct Simulation (`run_direct_simulation`)
+The returned object holds one entry per snapshot: `sim.x[k]` are the positions, `sim.u[k]`
+the states and `sim.t[k]` the time of snapshot `k`.
 
-The `run_direct_simulation` function is the standard runner for explicit macroscopic PDEs (such as the Euler or Burgers' equations). 
+!!! warning "Errors are caught"
+    Both runners catch every exception, log it with `@error` (including the backtrace), and
+    return `nothing`. Always check the result, e.g. `@assert sim !== nothing`, when calling them
+    directly.
 
-*   **Source Terms:** By default, it configures the integration environment with empty tuples for both `ExplicitSources` and `ImplicitSources`.
-*   **Initialization:** It applies the user-defined `InitialCondition` directly to the macroscopic physical equation across the particle grid.
-*   **Data Pipeline:** The raw conservative state vectors computed by the solver are directly packaged into the final data structure without modification.
+## Direct simulation
 
----
+[`run_direct_simulation`](@ref) evolves the PDE given in the `PDE` namespace.
 
-## Kinetic Simulation (`run_kinetic_simulation`)
+- No source terms are attached.
+- The initial condition is evaluated at every particle.
+- The stored states are the variables the equation evolves (conservative variables for Euler).
 
-The `run_kinetic_simulation` function manages the execution of highly coupled kinetic relaxation systems. It introduces a two-tier equation architecture to handle the bridging between macroscopic physics and kinetic transport.
+## Kinetic simulation
 
-*   **Two-Tier Assembly:** It first builds the base macroscopic equation (`eq_macro`) before extracting an additional `Kinetic` namespace to construct the kinetic system (`eq_kin`) and its associated `source_term`.
-*   **Dimensionality Overwrite:** To seamlessly reuse the standard spatial schemes, the execution context is dynamically overwritten to operate in the higher $NK$-dimensional kinetic space, and the relaxation source term is injected into `ImplicitSources`.
-*   **Kinetic Initialization:** It delegates initialization to the specialized kinetic overload of `set_initial_conditions!`, which projects the macroscopic initial condition onto the kinetic Maxwellian state.
-*   **Macroscopic Collapse:** Because users typically want to analyze the macroscopic physics, the runner automatically collapses the $NK$-dimensional kinetic data back into the $NM$-dimensional macroscopic state using the source term's `km` (Kin2Macro) mapping before returning the data. This behavior can be bypassed to save the raw kinetic variables by setting `save_relax` to `true`.
+[`run_kinetic_simulation`](@ref) replaces the macroscopic system with ``M`` variables by a
+linear kinetic system with ``N_K`` variables plus a stiff relaxation term (see
+[Kinetic Relaxation](SourceTerms/kinetic.md)).
 
----
+- **Two equations.** The macroscopic equation is built first; [`build_kinetic_system`](@ref)
+  then builds the kinetic `LinearAdvection` system and the [`RelaxationSourceTerm`](@ref) from
+  the `Kinetic` namespace.
+- **Kinetic context.** The context is switched to the kinetic equation and `M = N_K`, so the
+  same schemes run on the kinetic variables. The relaxation term is registered as an implicit
+  source, which requires an IMEX stepper (`:IMEXEuler`, `:ARS222`, `:ARS233`, `:PRSSP3`, `:SSP332`).
+- **Initialization.** The macroscopic initial condition is mapped to the kinetic equilibrium
+  (Maxwellian) at every particle.
+- **Output.** Snapshots are summed back to the macroscopic variables with the source term's
+  `Kin2Macro` map. Set `:save_relax => true` to keep the raw kinetic variables instead.
 
-## API Documentation
+## API
 
 ```@docs
 run_direct_simulation

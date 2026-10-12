@@ -11,7 +11,8 @@ Defines a discontinuous rectangular sub-region.
 - `mins::Space{D}`: The lower spatial bounds of the rectangular region.
 - `maxs::Space{D}`: The upper spatial bounds of the rectangular region.
 
-Evaluates to `u_box` if the queried position falls strictly within `mins` and `maxs`, and evaluates to `u_bg` otherwise.
+Evaluates to `u_box` if `mins .<= pos .<= maxs` holds in every direction (the boundary
+belongs to the box), and to `u_bg` otherwise.
 """
 struct Box{D, M} <: InitialCondition
     u_bg::State{M}

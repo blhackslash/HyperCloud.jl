@@ -1,40 +1,79 @@
-# The Builder Architecture
+# Builder API
 
-The HyperCloud framework utilizes a strictly modular factory pattern to construct simulation environments. Instead of manually instantiating nested numerical structs, users provide flat configuration dictionaries. Central orchestrators (such as `run_direct_simulation` or `run_kinetic_simulation`) segregate these dictionaries into isolated namespaces and sequentially invoke a series of `build_*` functions to assemble the computational pipeline.
+The runners never construct solver components directly. They split the parameter dictionary
+into namespaces and call one `build_*` function per component. Every builder dispatches on a
+`Val` of a configuration value, so new components are added by defining a method, without
+changing HyperCloud.
 
-## The Context Dictionary
+## Build order and context
 
-During the assembly phase, the orchestrator maintains a shared `context::Dict{Symbol, Any}`. This dictionary acts as a dependency injection container. As each component is built, it is cached in the context (e.g., `context[:Equation]`, `context[:Domain]`, `context[:Grid]`), making it instantly accessible to downstream builders. It also stores global execution parameters, such as the spatial dimension (`context[:D]`), the precision type (`context[:Type]`), and critical spatial metrics (`context[:max_dx]`).
+The builders share a `context::Dict{Symbol, Any}`. Each one reads what earlier builders stored
+and adds its own result:
 
-## Overloading and Custom Logic
+| Step | Builder | Reads from `context` | Stores |
+|:-----|:--------|:---------------------|:-------|
+| 0 | runner | — | `:T` |
+| 1 | [`build_equation`](@ref) | `:T` | `:Equation`, `:D`, `:M` |
+| 1b | [`build_kinetic_system`](@ref) (kinetic only) | `:T`, `:D`, `:M`, `:Equation` | overwrites `:Equation`, `:M`; `:ImplicitSources` |
+| 2 | [`build_domain`](@ref) | `:T`, `:D` | `:Domain` |
+| 3 | [`build_particle_grid`](@ref) | `:T`, `:D`, `:M`, `:Domain`, `:WeightConf` | `:max_dx`, `:Grid` |
+| 3b | [`build_weights`](@ref) (called by step 3) | `:T`, `:max_dx` | `:interp_range` |
+| 4 | [`build_flux`](@ref), [`build_limiter`](@ref), [`build_mood`](@ref) | `:T`, `:Grid` (MOOD) | `:Flux`, `:Limiter`, `:MOOD` |
+| 5 | [`build_scheme`](@ref) | `:T`, `:D`, `:M`, `:Flux`, `:Limiter` | `:Scheme` |
+| 6 | [`build_tableau`](@ref), [`build_timestepper`](@ref) | everything above, `:ExplicitSources`, `:ImplicitSources` | `:Tableau` |
+| 7 | [`build_ic`](@ref) | `:T`, `:D`, `:M` (macroscopic) | — |
 
-The builder system is explicitly designed for user extensibility via Julia's multiple dispatch and value types (`Val`). Every major component builder extracts a specific key (usually `:name` or `:domain`) and dispatches to a targeted function signature.
+The kinetic runner builds the initial condition right after step 1, while `:M` still holds the
+macroscopic size.
 
-If you want to inject custom physics, schemes, or boundary conditions, you do not need to modify the framework's source code. You only need to fulfill the input/output contract by overloading the generic fallback method in your own script and ensuring your struct subtypes the correct abstract interface. 
+`:T` is the floating-point type (`params[:T]`, default `Float64`). The runners set
+`:ExplicitSources` and `:ImplicitSources` to `()` unless a source term is added.
 
-For example, to implement a custom spatial scheme, you would define your struct as a subtype of `DivergenceInterpolator`, and then overload `build_scheme`:
+## Extending the builders
+
+| Builder | Dispatches on | Extend with |
+|:--------|:--------------|:------------|
+| `build_equation` | `:PDE_name` | `build_equation(::Val{:x}, conf, ctx)` |
+| `build_domain` | `:Grid_domain` | `build_domain(::Val{:x}, conf, ctx)` |
+| `build_weights` | `:Weight_name` | `build_weights(::Val{:x}, conf, ctx)` |
+| `build_ic` | `:IC_name` | `build_ic(::Val{:x}, conf, ctx)` |
+| `build_flux` | `:Flux_name` | `build_flux(::Val{:x}, conf, ctx)` |
+| `build_limiter` | `:Limiter_name` | `build_limiter(::Val{:x}, conf, ctx)` |
+| `build_mood_criterion` | `:MOOD_criterion` | `build_mood_criterion(::Val{:x}, conf, ctx)` |
+| `build_mood_strategy` | `:MOOD_strategy` | `build_mood_strategy(::Val{:x}, conf, ctx)` |
+| `build_scheme` | `:Scheme_name` | `build_scheme(::Val{:x}, conf, ctx)` |
+| `build_tableau` | `:Time_stepper` | `build_tableau(::Val{:x}, conf, ctx)` |
+
+Unknown names raise an error naming the missing method. A complete example for initial
+conditions is in [Initial Conditions](ICs.md); a new equation is described in
+[PDE Architecture](PDEs/main.md).
+
+A custom spatial scheme follows the same pattern. The returned object must implement the
+interface the time steppers expect from the built-in schemes:
 
 ```julia
-# 1. Define your custom scheme fulfilling the API contract
-struct MyCustomScheme{T, D} <: DivergenceInterpolator{D}
-    my_param::Float64
-end
-
-# 2. Overload the builder method in your local scope
-function HyperCloud.build_scheme(::Val{:my_custom_scheme}, conf::Dict, context::Dict)
-    T = context[:Type]::DataType
+function HyperCloud.build_scheme(::Val{:my_scheme}, conf::Dict, context::Dict)
+    T = context[:T]::DataType
     D = context[:D]::Int
-    
-    # Extract custom parameters from the configuration dictionary
-    my_param = conf[:my_param]
-    
-    # Return the instantiated object
-    return MyCustomScheme{T, D}(my_param)
+    M = context[:M]::Int
+    return MyScheme(T, D, M, conf[:my_param]; flux = context[:Flux])
 end
 ```
-By passing `:name => :my_custom_scheme` in your `Scheme` configuration namespace, the framework will now dynamically route to your implementation. As long as the returned object adheres to the expected abstract type interfaces (and implements the required mathematical evaluation logic expected by the time stepper), the central orchestrator will seamlessly integrate it into the main solver loop.
 
-## API Documentation
+`:Scheme_name => :my_scheme, :Scheme_my_param => 3` then selects it.
+
+### Custom boundary conditions
+
+`:Grid_bc` maps boundary tags to boundary conditions. Besides instances and the names
+`:outflow` and `:fixed_dirichlet`, it accepts the name of any zero-argument constructor defined
+in `Main` or in HyperCloud:
+
+```julia
+struct MyWall <: AbstractBoundaryCondition end   # plus the methods HyperCloudCore requires
+params[:Grid_bc] = Dict(1 => :MyWall, 2 => :outflow)
+```
+
+## API
 
 ```@docs
 build_equation

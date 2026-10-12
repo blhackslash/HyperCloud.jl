@@ -92,10 +92,15 @@ function analytic_closure(eq::EulerEquation{1, M, T}, ic::Riemann, geom::Geometr
     rho_L, m_L, E_L = ic.uL
     rho_R, m_R, E_R = ic.uR
     x0 = ic.p0[1]
-    
-    u_L = m_L / rho_L
+
+    # `uL` lies on the side where (x - x0) * n < 0. If n points in -x, solve the problem in
+    # the mirrored frame x' = σ (x - x0), where velocities also change sign (u' = σ u),
+    # and map the momentum back at the end.
+    σ = ic.n[1] < 0 ? -one(T) : one(T)
+
+    u_L = σ * m_L / rho_L
     p_L = (gamma - one(T)) * (E_L - T(0.5) * rho_L * u_L^2)
-    u_R = m_R / rho_R
+    u_R = σ * m_R / rho_R
     p_R = (gamma - one(T)) * (E_R - T(0.5) * rho_R * u_R^2)
     
     c_L = sqrt(gamma * p_L / rho_L)
@@ -125,7 +130,7 @@ function analytic_closure(eq::EulerEquation{1, M, T}, ic::Riemann, geom::Geometr
         
         if t <= T(1e-9); return ic(SVector{1, T}(x)); end
         
-        s_query = (x - x0) / t
+        s_query = σ * (x - x0) / t
         rho_final, u_final, p_final = zero(T), zero(T), zero(T)
 
         if s_query <= u_star # Left of contact
@@ -164,6 +169,6 @@ function analytic_closure(eq::EulerEquation{1, M, T}, ic::Riemann, geom::Geometr
             end
         end
 
-        return SVector{3, T}(rho_final, rho_final * u_final, p_final / (gamma - one(T)) + T(0.5) * rho_final * u_final^2)
+        return SVector{3, T}(rho_final, σ * rho_final * u_final, p_final / (gamma - one(T)) + T(0.5) * rho_final * u_final^2)
     end
 end

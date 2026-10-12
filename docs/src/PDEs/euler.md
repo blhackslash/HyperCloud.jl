@@ -1,33 +1,49 @@
 # Euler Equations
 
-The `EulerEquation` module implements the compressible Euler equations for ideal gases. It models the dynamics of inviscid, adiabatic fluids by conserving mass, momentum, and energy across arbitrary spatial dimensions.
+`EulerEquation{D, M, T, R}` implements the compressible Euler equations for an ideal gas in
+``D`` dimensions, with conservative variables ``U = (\rho, \rho\vec u, E)`` and ``M = D + 2``:
 
-## Mathematical Formulation
+```math
+\begin{aligned}
+\partial_t \rho + \nabla\cdot(\rho\vec u) &= 0,\\
+\partial_t (\rho\vec u) + \nabla\cdot(\rho\vec u\otimes\vec u + p I) &= 0,\\
+\partial_t E + \nabla\cdot\big(\vec u\,(E + p)\big) &= 0,
+\end{aligned}
+\qquad
+E = \frac{p}{\gamma - 1} + \frac{1}{2}\rho\lVert\vec u\rVert^2 .
+```
 
-For an ideal gas with a specific heat ratio $\gamma$, the conservative state vector is $U = [\rho, \rho \vec{u}, E]^T$. The multi-dimensional system is defined as:
+In a configuration: `:PDE_name => :euler, :PDE_D => D, :PDE_gamma => 1.4`. Initial states are
+given as conservative variables.
 
-$$\frac{\partial \rho}{\partial t} + \nabla \cdot (\rho \vec{u}) = 0$$
-$$\frac{\partial (\rho \vec{u})}{\partial t} + \nabla \cdot (\rho \vec{u} \otimes \vec{u} + p I) = 0$$
-$$\frac{\partial E}{\partial t} + \nabla \cdot (\vec{u} (E + p)) = 0$$
+## Implementation
 
-where the pressure $p$ is governed by the ideal gas equation of state: $E = \frac{p}{\gamma - 1} + \frac{1}{2} \rho \Vert{}\vec{u}\Vert{}^2$.
+- **Construction.** `EulerEquation(Val(D), T, gamma, rep)` sets `M = D + 2`. `rep` is the
+  representation tag (default `Conservative()`).
+- **Variables.** `prim2cons` maps ``(\rho, \vec u, p) \mapsto (\rho, \rho\vec u, E)``. `cons2prim`
+  is its inverse and floors density and pressure at ``10^{-7}``.
+- **Flux.** Defined for the `Conservative` representation.
+- **Wave speed.** `max_eigenvalue` returns ``|u_d| + c`` with ``c = \sqrt{\gamma p / \rho}``, using
+  a ``10^{-9}`` floor on density and pressure. For `Conservative` it expects conservative
+  variables; for an `NCRepresentation` it expects primitive variables.
 
-## API Implementation Details
+## Exact solution: 1D Riemann problem
 
-*   **Dimensionality:** The system adapts to any spatial dimension $D$, automatically setting the state vector length to $M = D + 2$. It stores the specific heat ratio $\gamma$ alongside an equation representation tag.
-*   **Variable Conversions (`prim2cons`, `cons2prim`):** Provides strict conversions between the primitive state $(\rho, \vec{u}, p)$ and the conservative state $(\rho, \rho\vec{u}, E)$. To ensure numerical robustness during aggressive transients, `cons2prim` enforces a strict floor value of $10^{-7}$ on both density and pressure.
-*   **Flux Evaluation:** The `flux` function strictly evaluates the conservative mass, momentum, and energy fluxes for each spatial dimension $d$.
-*   **Eigenvalues:** The `max_eigenvalue` function computes the maximum acoustic wave speed $\vert{}u_d\vert{} + c$, where $c = \sqrt{\gamma p / \rho}$. It dispatches dynamically based on whether the system is tagged as `Conservative` or `NCRepresentation` to extract the correct velocity components, utilizing a $10^{-9}$ floor for density and pressure evaluations to prevent domain errors.
+For `Riemann` initial data in 1D the closure computes the exact solution (e.g. for the Sod
+shock tube):
 
-## Analytic Closures
+1. **Star pressure.** ``p^*`` is found with Newton's method on the pressure function, using a
+   finite-difference derivative and the tolerance ``|f(p^*)| < 10^{-9}``. This gives ``u^*``.
+2. **Wave types.** Each outer wave is a shock if ``p^* > p_{L/R}``, otherwise a rarefaction.
+3. **Evaluation.** At a point ``(x, t)`` the closure selects the region by the similarity
+   variable ``(x - x_0)/t``: outer state, rarefaction fan, star state left or right of the
+   contact. It returns conservative variables.
 
-The module features an exact analytical solver for the 1D Euler Riemann problem (e.g., the Sod Shock Tube). 
+If the normal points in ``-x``, the problem is solved in the mirrored frame, so both
+orientations of the same data give the same solution. Vacuum generation is not handled: ``p^*``
+is floored at ``10^{-9}``.
 
-*   **Iterative Solver:** The closure employs a Newton-Raphson root-finding algorithm (capped at 100 iterations) to iteratively converge on the exact pressure within the intermediate star region ($p^*$).
-*   **Wave Categorization:** Based on the computed $p^*$, the solver classifies the left and right traveling waves as either discrete shocks or continuous rarefaction fans.
-*   **Spacetime Evaluation:** It analytically evaluates the density, velocity, and pressure profiles across the entire domain, explicitly calculating the states within the expansion fan tails/heads and across the contact discontinuity.
-
-## Documentation
+## API
 
 ```@docs
 EulerEquation

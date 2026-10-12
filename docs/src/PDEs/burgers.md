@@ -1,32 +1,63 @@
 # Burgers' Equation
 
-The `BurgersEquation` module implements the inviscid Burgers' equation for arbitrary spatial dimensions $D$. It describes the nonlinear propagation of waves where the wave speed is directly proportional to the state itself, naturally leading to the formation of shock waves and rarefaction fans.
+`BurgersEquation{D, T}` implements the inviscid Burgers' equation in ``D`` dimensions:
 
-## Mathematical Formulation
+```math
+\frac{\partial u}{\partial t} + \sum_{d=1}^D \frac{\partial}{\partial x_d}\left(\frac{u^2}{2}\right) = 0 .
+```
 
-The scalar conservation law for the multi-dimensional inviscid Burgers' equation is given by:
+The state is a scalar (`M = 1`). Information travels with velocity ``(u, \dots, u)``, so
+compressive regions steepen into shocks and expansive regions open into rarefaction fans.
 
-$$\frac{\partial u}{\partial t} + \sum_{d=1}^D \frac{\partial}{\partial x_d} \left( \frac{1}{2} u^2 \right) = 0$$
+In a configuration: `:PDE_name => :burgers, :PDE_D => D`.
 
-## API Implementation Details
+## Implementation
 
-*   **State & Dimensionality:** The system enforces a strictly scalar state vector ($M=1$) across any user-defined spatial dimension $D$.
-*   **Variable Conversions:** Because the system evaluates a single conserved scalar, `prim2cons` and `cons2prim` default to an identity mapping (`u -> u`).
-*   **Flux Evaluation:** The physical flux $F_d(u)$ computes the quadratic term $0.5 u^2$ across all spatial dimensions.
-*   **Eigenvalues:** The maximum eigenvalue (wave speed) along any axis simplifies to the absolute local state value, $\vert{}u\vert{}$.
-*   **Velocity (Jacobian):** The advective velocity matrix used for upwind evaluations is exactly the local state $u$, returned as a strictly typed $1 \times 1$ static matrix.
+- **Variables.** `prim2cons` and `cons2prim` are the identity.
+- **Flux.** ``F_d(u) = u^2/2`` in every direction.
+- **Wave speed.** `max_eigenvalue` returns ``|u|``; `velocity` returns the ``1 \times 1``
+  Jacobian ``u``.
 
-## Analytic Closures
+## Exact solutions
 
-The module provides extensive support for exact analytical solutions, known as closures, which evaluate the exact mathematical state at any continuous spacetime coordinate $(x, t)$ without requiring numerical integration.
+### Riemann and smoothed Riemann (any dimension)
 
-*   **1D Riemann & Smoothed Riemann (`Riemann`, `SRiemann`):** Computes exact physical shock speeds via the Rankine-Hugoniot condition and traces linear expansion fans for rarefactions.
-*   **1D Box (`Box`):** Solves exact wave interactions for both "top-hat" (producing trailing shocks) and "well" (producing trailing rarefactions) initial conditions, accurately predicting shock-rarefaction intersection times.
-*   **1D Sine (`Sine`):** Resolves the smooth non-linear wave steepening over time using a Newton-Raphson characteristic trace.
-*   **Multi-Dimensional Gauss (`Gauss`):** Employs an iterative Newton-Raphson root-finding algorithm to trace back characteristics for Gaussian pulses in N-dimensions.
-*   **2D Riemann (`Riemann`):** Extends the 1D shock and rarefaction fan logic using the directional normal vector of the interface.
+Along the normal coordinate ``\xi = (x - p_0)\cdot n`` the equation reduces to a 1D law with
+flux ``a\,u^2/2``, where ``a = \sum_d n_d``. The characteristic speeds are ``a u_L`` and
+``a u_R``:
 
-## Documentation
+- ``a u_L > a u_R``: a shock moving at ``a (u_L + u_R)/2`` (Rankine–Hugoniot).
+- otherwise: a rarefaction fan with ``u = \xi / (a t)`` between the two speeds.
+
+The wave type depends on the sign of ``a``, so flipping the normal and swapping the states gives
+the same solution. The normal does not need to be normalized. For `SRiemann` the closure returns
+the sharp Riemann solution, a good reference once the waves are wider than `width`.
+
+### Gauss (any dimension)
+
+The solution is given implicitly by ``u = u_0(x - u\,t\,\mathbf{1})``, which is solved with
+Newton's method. This is only valid before the pulse breaks, at
+
+```math
+t^* = \frac{\mathrm{width}}{|a|}\sqrt{\frac{e}{2D}} .
+```
+
+Past ``t^*`` Newton may not converge; the closure then warns and returns its last iterate.
+
+### Box (1D)
+
+The top-hat case (`u_box > u_bg`) produces a rarefaction at the left edge and a shock at the
+right edge. The well case (`u_box < u_bg`) produces a shock at the left edge and a rarefaction at
+the right edge. Both are exact before and after the time the fan catches up with the shock,
+``t_\mathrm{int} = 2(x_e - x_s)/|u_\mathrm{box} - u_\mathrm{bg}|``. After that the shock moves like
+``\sqrt{t}`` relative to the background flow and its strength decays like ``t^{-1/2}``.
+
+### Other initial conditions
+
+There is no exact solution. The closure warns and returns the initial condition, which is
+only correct at ``t = 0``.
+
+## API
 
 ```@docs
 BurgersEquation

@@ -22,16 +22,16 @@ end
 # Returns the localized Jacobian (u) as a strict 1x1 SMatrix
 @inline velocity(eq::BurgersEquation, u::State{1, T}, d::Int) where {T} = SMatrix{1, 1, T, 1}(u[1])
 
-# Generic fallback for t=0 or unhandled ICs
-analytic_closure(eq::BurgersEquation{D}, ic::InitialCondition, params::ParamDict) where {D} = (st::SVector) -> ic(SVector{D, Float64}(ntuple(d -> st[d], Val(D))))
-
 # =========================================================================
 # BURGERS ANALYTIC CLOSURES
 # =========================================================================
 
-# Generic fallback for t=0 or unhandled ICs
-analytic_closure(eq::BurgersEquation{D, T}, ic::InitialCondition, geom::GeometricDomain) where {D, T} = 
-    (st::SVector) -> ic(SVector{D, T}(ntuple(d -> T(st[d]), Val(D))))
+# Fallback for ICs without an exact solution: returns the initial condition, which is only
+# correct at t = 0. Warn once at construction so a wrong reference is never silent.
+function analytic_closure(eq::BurgersEquation{D, T}, ic::InitialCondition, geom::GeometricDomain) where {D, T}
+    @warn "No exact Burgers solution for $(nameof(typeof(ic))) in $(D)D; the reference returns the initial condition and is only valid at t = 0."
+    return (st::SVector) -> ic(SVector{D, T}(ntuple(d -> T(st[d]), Val(D))))
+end
 
 # Multi-Dimensional Gauss (Newton-Raphson Characteristic Trace)
 function analytic_closure(eq::BurgersEquation{D, T}, ic::Gauss, geom::GeometricDomain) where {D, T}
@@ -73,26 +73,42 @@ function analytic_closure(eq::BurgersEquation{D, T}, ic::Gauss, geom::GeometricD
     end
 end
 
-# 1D Riemann
-function analytic_closure(eq::BurgersEquation{1, T}, ic::Union{Riemann, SRiemann}, geom::GeometricDomain) where {T}
-    x0 = ic.p0[1]
-    uL = ic.uL[1]
-    uR = ic.uR[1]
-    s = T(0.5) * (uL + uR)
+# Planar Riemann problem in any dimension D.
+#
+# With ξ = (x - p0)⋅n and u = u(ξ, t), the equation u_t + Σ_d ∂_d(u²/2) = 0 becomes
+# u_t + a ∂_ξ(u²/2) = 0 with a = Σ_d n_d. The wave type therefore depends on the
+# characteristic speeds a·uL and a·uR, not on uL vs uR alone: flipping the sign of `n`
+# (and swapping uL/uR) describes the same data and must give the same solution.
+# `n` does not need to be normalized.
+#
+# For SRiemann this returns the sharp-interface Riemann solution (the t → 0 limit of the
+# smoothed data is ignored), which is a good reference once the fan/shock is wider than `width`.
+function analytic_closure(eq::BurgersEquation{D, T}, ic::Union{Riemann, SRiemann}, geom::GeometricDomain) where {D, T}
+    p0 = SVector{D, T}(ic.p0)
+    n  = SVector{D, T}(ic.n)
+    uL, uR = T(ic.uL[1]), T(ic.uR[1])
+
+    a = sum(n)
+    aL, aR = a * uL, a * uR      # characteristic speeds along ξ
+    s = a * (uL + uR) / 2        # shock speed along ξ
 
     return function exact_burgers_riemann(st::SVector)
         t = T(st[end])
-        x = T(st[1])
-        
-        if t <= T(1e-12); return ic(SVector{1, T}(x)); end
-        
-        if uL > uR # Shock
-            return x < x0 + s * t ? ic.uL : ic.uR
-        else # Rarefaction
-            if x < x0 + uL * t; return ic.uL
-            elseif x > x0 + uR * t; return ic.uR
-            else return SVector{1, T}((x - x0) / t)
-            end
+        pos = SVector{D, T}(ntuple(d -> T(st[d]), Val(D)))
+
+        if t <= T(1e-12); return SVector{1, T}(ic(pos)); end
+
+        ξ = dot(pos - p0, n)
+        if aL > aR                         # converging characteristics ⇒ shock
+            return SVector{1, T}(ξ < s * t ? uL : uR)
+        elseif ξ < aL * t                  # left of the fan
+            return SVector{1, T}(uL)
+        elseif ξ > aR * t                  # right of the fan
+            return SVector{1, T}(uR)
+        elseif abs(a) < T(1e-14)           # stationary interface (a = 0): same convention as the IC
+            return SVector{1, T}(uR)
+        else                               # inside the fan
+            return SVector{1, T}(ξ / (a * t))
         end
     end
 end
@@ -142,32 +158,6 @@ function analytic_closure(eq::BurgersEquation{1, T}, ic::Box, geom::GeometricDom
                 elseif x < xe + ug * t; return SVector{1, T}((x - xe) / t)
                 else return ic.u_bg
                 end
-            end
-        end
-    end
-end
-
-# 2D Riemann
-function analytic_closure(eq::BurgersEquation{2, T}, ic::Riemann, geom::GeometricDomain) where {T}
-    n_sum = ic.n[1] + ic.n[2]
-    uL, uR = ic.uL[1], ic.uR[1]
-    s = T(0.5) * (uL + uR) * n_sum
-
-    return function exact_burgers2d_riemann(st::SVector)
-        t = T(st[end])
-        pos = SVector{2, T}(T(st[1]), T(st[2]))
-        
-        if t <= T(1e-12); return ic(pos); end
-        
-        d = dot(pos - ic.p0, ic.n)
-        if uL > uR # Shock
-            return d < s * t ? ic.uL : ic.uR
-        else # Rarefaction
-            if d < uL * n_sum * t; return ic.uL
-            elseif d > uR * n_sum * t; return ic.uR
-            else 
-                if abs(t * n_sum) < T(1e-14); return SVector{1, T}(T(0.5) * (uL + uR)); end
-                return SVector{1, T}(d / (t * n_sum))
             end
         end
     end

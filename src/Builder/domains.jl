@@ -41,21 +41,23 @@ end
 """
     build_domain(domain_conf::Dict, context::Dict)
 
-Instantiates the continuous `GeometricDomain` (e.g., `:rectangular` or `:spherical`) and parses boundary conditions.
-Requires a `:domain` key unless a pre-instantiated `GeometricDomain` is passed via the `:instance` key. Dynamically resolves boundary conditions using `parse_bc` and maps periodic boundary flags.
+Instantiates the continuous `GeometricDomain` and parses its boundary conditions.
+
+`domain_conf[:domain]` is either a shape name (`:rectangular`, `:spherical`, or a custom
+shape, see below) or an already-constructed `GeometricDomain`, which is returned unchanged.
+Boundary conditions are read from `:bc` via `parse_bc`, periodicity from `:periodic`.
 """
 function build_domain(domain_conf::Dict, context::Dict)
-    # Direct pass-through if the user supplied an already-instantiated GeometricDomain
-    if domain_conf[:domain] isa GeometricDomain
-        return domain_conf[:domain]
-    end
-    
     if !haskey(domain_conf, :domain)
-        error("Domain configuration must strictly include a :domain key (e.g., :rectangular, :spherical).")
+        error("Domain configuration must include a :domain key (e.g., :rectangular, :spherical, or a GeometricDomain).")
     end
-    
-    domain_name = domain_conf[:domain]::Symbol
-    return build_domain(Val(domain_name), domain_conf, context)
+
+    domain = domain_conf[:domain]
+
+    # Direct pass-through if the user supplied an already-instantiated GeometricDomain
+    domain isa GeometricDomain && return domain
+
+    return build_domain(Val(domain::Symbol), domain_conf, context)
 end
 
 """
@@ -94,8 +96,9 @@ function build_domain(::Val{:spherical}, domain_conf::Dict, context::Dict)
     req_mins = Tuple(T.(domain_conf[:mins]))
     req_maxs = Tuple(T.(domain_conf[:maxs]))
     
-    center = ntuple(d -> (req_mins[d] + req_maxs[d]) / 2.0, Val(D))
-    radius = (req_maxs[1] - req_mins[1]) / 2.0
+    # `/ 2` (not `/ 2.0`) keeps the requested precision T
+    center = ntuple(d -> (req_mins[d] + req_maxs[d]) / 2, Val(D))
+    radius = (req_maxs[1] - req_mins[1]) / 2
     
     return get_spherical_domain(T, center, radius; bc_map = bc_map, is_periodic = is_per)
 end

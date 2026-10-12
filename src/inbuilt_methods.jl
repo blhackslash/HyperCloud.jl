@@ -91,7 +91,7 @@ function get_master_method_dict()
         # =====================================================================
         # 2. EXPLICIT 2ND ORDER (RK2) - DIRECT
         # =====================================================================
-        create_method(:RK2, :Upwind, 2, ignore=ignore_relax, Scheme_upwind_alg_nd=:Classic),
+        # (Upwind is strictly first order, so there is no RK2Upwind2.)
         create_method(:RK2, :MUSCL,  2, ignore=ignore_relax),
         create_method(:RK2, :MUSCL,  1, ignore=ignore_relax),
         create_method(:RK2, :MUSCL,  2, limiter=:VK, limiter_mode=:hard, ignore=ignore_relax),
@@ -107,14 +107,12 @@ function get_master_method_dict()
         # =====================================================================
         # 3. RELAXATION 2ND ORDER (ARS222) - KINETIC
         # =====================================================================
-        create_method(:ARS222, :Upwind, 2, Scheme_upwind_alg_nd=:Classic),
         create_method(:ARS222, :MUSCL,  2),
         create_method(:ARS222, :MUSCL,  2, limiter=:VK, limiter_mode=:hard),
         create_method(:ARS222, :MUSCL,  2, limiter=:minmod, limiter_mode=:hard),
         create_method(:ARS222, :MUSCL,  2, mood_criterion=:U2, mood_strategy=:EPD1, MOOD_delta_relax = 0.),
         create_method(:ARS222, :MUSCL,  2, mood_criterion=:U2, mood_strategy=:EPD2, MOOD_delta_relax = 0.),
         create_method(:ARS222, :MUSCL,  2, mood_criterion=:U2, mood_strategy=:SEPD0, MOOD_delta_relax = 0.),
-        create_method(:ARS222, :MUSCL,  2, limiter=:VK, limiter_mode=:hard),
         create_method(:ARS222, :MUSCL,  2, mood_criterion=:U1, mood_strategy=:EPD1, MOOD_delta_relax = 0.),
 
         # =====================================================================
