@@ -55,7 +55,7 @@ function burgers_kinetic()
         base_methods,
         # Compare a Direct scheme vs a Kinetic scheme
         ["RK2MUSCL2", "ARS222MUSCL2"];
-        varied_params = varied_params, ref_func_name = "analytical_solution"
+        varied = varied_params, reference = "analytical_solution"
     )
     
     return sim_config

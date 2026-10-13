@@ -46,7 +46,7 @@ end
 
 "Dispatch to the pipeline named in `params[:sim_func_name]`."
 run_sim(params) = getfield(HyperCloud, params[:sim_func_name])(params)
-
+@eval HyperCloud dummy_func(params) = $(NoSimData)()
 "Spacetime vector `(x..., t)` as expected by the analytic closures."
 spacetime(x, t) = SVector(Tuple(x)..., Float64(t))
 
@@ -168,10 +168,10 @@ const KNOWN_BROKEN_METHODS = Dict(
     try
         HyperCloud.CONFIG_ROOT_OVERWRITE[] = test_dir
         HyperCloud.CONFIG_SEARCH_PATHS[] = ["mock_configs"]
-
+        
         @eval Main begin
             function my_local_sim()
-                shared = Dict{Symbol, Any}(:Time_tmax => 0.0, :Time_snapshots => 0)
+                shared = Dict{Symbol, Any}(:Time_tmax => 0.0, :Time_snapshots => 0, :sim_func_name => :dummy_func)
                 return SimulationConfig(shared, Dict(), Symbol[])
             end
         end
@@ -180,7 +180,7 @@ const KNOWN_BROKEN_METHODS = Dict(
         open(joinpath(mock_configs_dir, "$(plugin_name).jl"), "w") do f
             write(f, """
             function test_plugin()
-                shared = Dict{Symbol, Any}(:Time_tmax => 0.0, :Time_snapshots => 0)
+                shared = Dict{Symbol, Any}(:Time_tmax => 0.0, :Time_snapshots => 0, :sim_func_name => :dummy_func)
                 return SimulationConfig(shared, Dict(), Symbol[])
             end
             """)
@@ -328,7 +328,7 @@ end
 
     @testset "build_tableau / build_scheme" begin
         for s in (:Euler, :RK2, :RK3, :RK4)
-            @test build_tableau(Dict(:stepper => s), ctxT) isa HC.RKButcherTableau
+            @test build_tableau(Dict(:stepper => s), ctxT) isa HC.IMEXButcherTableau
         end
         for s in IMEX_STEPPERS
             @test build_tableau(Dict(:stepper => s), ctxT) isa HC.IMEXButcherTableau
@@ -895,11 +895,11 @@ end
 
     @testset "Sod shock tube: every configured method vs exact" begin
         config = euler_1d_sod()
-        γ = config.shared_params[:PDE_gamma]
-        cases = sort!([(k, v) for (k, v) in config.methods_dict if haskey(v, :Time_stepper)]; by = first)
+        γ = config.shared[:PDE_gamma]
+        cases = sort!([(k, v) for (k, v) in config.methods if haskey(v, :Time_stepper)]; by = first)
 
         @testset "$name" for (name, m) in cases
-            err, sim = l1_error(merge(config.shared_params, m))
+            err, sim = l1_error(merge(config.shared, m))
             @test sim !== nothing
             @test err < 0.1
             if sim !== nothing
@@ -958,7 +958,7 @@ end
             :Upwind => copy(UPWIND1),
         )
         conf = SimulationConfig(linear_1d_gauss(50), methods, [:analytical_solution, :Upwind];
-                                ref_func_name = :analytical_solution)
+                                reference = :analytical_solution)
         run_all_simulations(conf; force_overwrite = true, calculate_stats = true)
     end
 end

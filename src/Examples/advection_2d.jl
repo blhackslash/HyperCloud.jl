@@ -46,7 +46,7 @@ function advection_2d()
         ),
         base_methods,
         ["RK2MUSCL2"];
-        varied_params = varied_params, ref_func_name = "analytical_solution"
+        varied = varied_params, reference = "analytical_solution"
     )
     return sim_config
 end

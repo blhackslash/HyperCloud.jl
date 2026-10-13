@@ -122,5 +122,5 @@ function euler_1d_sod()
         :RK4MUSCL4_U2_EPD1
     ]
 
-    return SimulationConfig(shared, methods, active_methods; ref_func_name=:analytical_solution)
+    return SimulationConfig(shared, methods, active_methods; reference=:analytical_solution)
 end
