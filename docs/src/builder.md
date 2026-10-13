@@ -77,17 +77,6 @@ params[:Grid_bc] = Dict(1 => :MyWall, 2 => :outflow)
 
 ```@docs
 build_equation
-build_domain
-build_particle_grid
 build_ic
 build_kinetic_system
-build_scheme
-build_flux
-build_limiter
-build_mood
-build_mood_criterion
-build_mood_strategy
-build_tableau
-build_timestepper
-build_weights
 ```
