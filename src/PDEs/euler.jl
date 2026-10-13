@@ -82,6 +82,25 @@ end
     return abs(u_d) + c
 end
 
+# Moving grids: material velocity and exact relative wave speed |u_d − w| + c
+@inline function fluid_velocity(eq::EulerEquation{D, M, T, <:Conservative}, U::State{M, T}) where {D, M, T}
+    rho = max(U[1], T(1e-9))
+    return Space{D, T}(ntuple(d -> U[1+d] / rho, Val(D)))
+end
+@inline fluid_velocity(eq::EulerEquation{D, M, T, <:NCRepresentation}, V::State{M, T}) where {D, M, T} =
+    Space{D, T}(ntuple(d -> V[1+d], Val(D)))
+
+@inline function max_eigenvalue(eq::EulerEquation{D, M, T, <:Conservative}, U::State{M, T}, d::Int, shift::Real) where {D, M, T}
+    rho = max(U[1], T(1e-9))
+    m_sq = sum(abs2, ntuple(i -> U[1+i], Val(D)))
+    p = max((eq.gamma - one(T)) * (U[M] - T(0.5) * m_sq / rho), T(1e-9))
+    return abs(U[1+d] / rho - T(shift)) + sqrt(eq.gamma * p / rho)
+end
+@inline function max_eigenvalue(eq::EulerEquation{D, M, T, <:NCRepresentation}, V::State{M, T}, d::Int, shift::Real) where {D, M, T}
+    rho = max(V[1], T(1e-9)); p = max(V[M], T(1e-9))
+    return abs(V[1+d] - T(shift)) + sqrt(eq.gamma * p / rho)
+end
+
 # =========================================================================
 # EULER ANALYTIC CLOSURES
 # =========================================================================

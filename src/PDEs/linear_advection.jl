@@ -47,6 +47,10 @@ end
 # API implementation returning the strict M x M matrix
 @inline velocity(eq::LinearAdvection, U::State, d::Int) = eq.vel[d]
 
+# Moving grids (scalar systems only: the transport velocity is unambiguous)
+@inline fluid_velocity(eq::LinearAdvection{D, 1, T}, U::State) where {D, T} = Space{D, T}(ntuple(d -> eq.vel[d][1, 1], Val(D)))
+@inline max_eigenvalue(eq::LinearAdvection{D, 1, T}, U::State, d::Int, shift::Real) where {D, T} = abs(eq.vel[d][1, 1] - T(shift))
+
 # Fulfill the core API for kinetic relaxation speeds
 @inline function kinetic_wave_speed(eq::LinearAdvection{D, NK, T}, d::Int, k::Int) where {D, NK, T}
     return eq.vel[d][k,k]

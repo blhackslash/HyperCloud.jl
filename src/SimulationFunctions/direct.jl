@@ -26,6 +26,7 @@ function run_direct_simulation(params::ParamDict)::Union{AbstractSimData, Nothin
         scheme_conf = extract_namespace(params, :Scheme)
         ic_conf     = extract_namespace(params, :IC)
         time_conf   = extract_namespace(params, :Time)
+        adapt_conf  = extract_namespace(params, :Adapt)
         
         # 2. Base Equation & Dimensions
         eq = build_equation(pde_conf, context)
@@ -42,8 +43,8 @@ function run_direct_simulation(params::ParamDict)::Union{AbstractSimData, Nothin
         context[:Domain] = geom
         context[:WeightConf] = weight_conf
         
-        pg = build_particle_grid(grid_conf, context)
-        context[:Grid] = pg
+        pg = build_particle_grid(grid_conf, context)      # also sets context[:Grid]
+        adaptivity = build_adaptivity(adapt_conf, context)
         
         # 4. Spatial Schemes
         context[:Flux]    = build_flux(flux_conf, context)
@@ -53,7 +54,7 @@ function run_direct_simulation(params::ParamDict)::Union{AbstractSimData, Nothin
         
         # 5. Time Stepper
         context[:Tableau] = build_tableau(time_conf, context)
-        method = build_timestepper(context)
+        method = build_timestepper(context; time_conf = time_conf)
         
         # 6. Initialization
         IC = build_ic(ic_conf, context)
@@ -69,7 +70,8 @@ function run_direct_simulation(params::ParamDict)::Union{AbstractSimData, Nothin
             method, eq, pg, tmax, dt; 
             is_cfl = is_cfl, snapshots = params[:snapshots], 
             remove_ghosts = get(params, :remove_ghosts, true), 
-            show_progress = _PROGRESS_BAR[], progress_interval = _PROGRESS_INTERVAL[]
+            show_progress = _PROGRESS_BAR[], progress_interval = _PROGRESS_INTERVAL[],
+            adaptivity = adaptivity
         )
         
         @info "Direct Simulation (D=$D) finished in$(round(elapsed_time, digits=2)) seconds."
@@ -78,7 +80,8 @@ function run_direct_simulation(params::ParamDict)::Union{AbstractSimData, Nothin
         valid_indices = findall(i -> isassigned(us_svector, i), 1:length(us_svector))
         sim_data = create_sim_data(xs_svector[valid_indices], us_svector[valid_indices], ts_full[valid_indices], params; xmins=Tuple(geom.mins), xmaxs=Tuple(geom.maxs), tmin=zero(T), tmax=tmax)
         add_stat!(sim_data, :Runtime, elapsed_time, :none)
-        add_stat!(sim_data, :k_step, Float64(k_step), :none) 
+        add_stat!(sim_data, :k_step, Float64(k_step), :none)
+        add_stat!(sim_data, :final_particle_count, Float64(pg.meta.N), :none)
         
         return sim_data
 

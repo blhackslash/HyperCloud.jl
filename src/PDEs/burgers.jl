@@ -22,6 +22,10 @@ end
 # Returns the localized Jacobian (u) as a strict 1x1 SMatrix
 @inline velocity(eq::BurgersEquation, u::State{1, T}, d::Int) where {T} = SMatrix{1, 1, T, 1}(u[1])
 
+# Moving grids: transport velocity (u in every direction) and exact relative wave speed
+@inline fluid_velocity(eq::BurgersEquation{D, T}, u::State{1, T}) where {D, T} = Space{D, T}(ntuple(_ -> u[1], Val(D)))
+@inline max_eigenvalue(eq::BurgersEquation, u::State{1, T}, d::Int, shift::Real) where {T} = abs(u[1] - T(shift))
+
 # =========================================================================
 # BURGERS ANALYTIC CLOSURES
 # =========================================================================

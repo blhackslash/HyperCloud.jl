@@ -27,6 +27,7 @@ function run_kinetic_simulation(params::ParamDict)::Union{AbstractSimData, Nothi
         scheme_conf = extract_namespace(params, :Scheme)
         ic_conf     = extract_namespace(params, :IC)
         time_conf   = extract_namespace(params, :Time)
+        adapt_conf  = extract_namespace(params, :Adapt)
         
         # 2. Base Macroscopic Equation
         eq_macro = build_equation(pde_conf, context)
@@ -52,8 +53,8 @@ function run_kinetic_simulation(params::ParamDict)::Union{AbstractSimData, Nothi
         context[:Domain] = geom
         context[:WeightConf] = weight_conf
         
-        pg = build_particle_grid(grid_conf, context)
-        context[:Grid] = pg
+        pg = build_particle_grid(grid_conf, context)      # also sets context[:Grid]
+        adaptivity = build_adaptivity(adapt_conf, context)
         
         # 5. Spatial Schemes
         context[:Flux]    = build_flux(flux_conf, context)
@@ -63,7 +64,7 @@ function run_kinetic_simulation(params::ParamDict)::Union{AbstractSimData, Nothi
         
         # 6. Time Stepper
         context[:Tableau] = build_tableau(time_conf, context)
-        method = build_timestepper(context)
+        method = build_timestepper(context; time_conf = time_conf)
         
         # 7. Initialization
         set_initial_conditions!(pg, source_term, IC, eq_macro)
@@ -78,7 +79,8 @@ function run_kinetic_simulation(params::ParamDict)::Union{AbstractSimData, Nothi
             method, eq_kin, pg, tmax, dt; 
             is_cfl = is_cfl, snapshots = params[:snapshots], 
             remove_ghosts = get(params, :remove_ghosts, true), 
-            show_progress = _PROGRESS_BAR[], progress_interval = _PROGRESS_INTERVAL[]
+            show_progress = _PROGRESS_BAR[], progress_interval = _PROGRESS_INTERVAL[],
+            adaptivity = adaptivity
         )
         
         @info "Kinetic Simulation (D=$D) finished in$(round(elapsed_time, digits=2)) seconds."
@@ -96,7 +98,8 @@ function run_kinetic_simulation(params::ParamDict)::Union{AbstractSimData, Nothi
         
         sim_data = create_sim_data(xs_svector[valid_indices], us_final, ts_full[valid_indices], params; xmins=Tuple(geom.mins), xmaxs=Tuple(geom.maxs), tmin=zero(T), tmax=tmax)
         add_stat!(sim_data, :Runtime, elapsed_time, :none)
-        add_stat!(sim_data, :k_step, Float64(k_step), :none) 
+        add_stat!(sim_data, :k_step, Float64(k_step), :none)
+        add_stat!(sim_data, :final_particle_count, Float64(pg.meta.N), :none)
         
         return sim_data
 
