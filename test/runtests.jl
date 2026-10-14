@@ -143,9 +143,7 @@ const IMEX_STEPPERS = (:ARS222, :ARS233, :IMEXEuler, :PRSSP3, :SSP332)
 
 # Master-dict entries that currently fail the sweep. They are reported as "Broken"
 # instead of failing. Delete an entry once it is fixed (Julia then reports "Unexpected Pass").
-const KNOWN_BROKEN_METHODS = Dict(
-    "RK2MUSCL1" => "L1 error ≈ 0.18 vs ≈ 0.03 for RK2Upwind1 on the same problem",
-)
+const KNOWN_BROKEN_METHODS = Dict{String, String}()
 
 # =========================================================================
 # MAIN TEST SUITE
