@@ -84,6 +84,16 @@ function analytic_closure(eq::LinearAdvection{D, M, T}, ic::InitialCondition, ge
     R = SMatrix{M, M, T}(real.(F.vectors))
     L = inv(R)
     
+    # The eigenvectors of Σ_d A_d only diagonalise every A_d if its eigenvalues are simple (or the
+    # family is diagonal). Verify instead of silently tracing wrong wave speeds.
+    for d in 1:D
+        Λ = L * eq.vel[d] * R
+        off = maximum(abs(Λ[i, j]) for i in 1:M, j in 1:M if i != j; init = zero(T))
+        off <= T(1e-10) * max(one(T), maximum(abs, Λ)) || error(
+            "Velocity matrix of dimension $d is not diagonalised by the eigenvectors of the summed system " *
+            "(repeated eigenvalues); the analytic ray-tracing closure cannot be built for this system.")
+    end
+
     wave_speeds = SVector{M, SVector{D, T}}(ntuple(Val(M)) do m
         SVector{D, T}(ntuple(Val(D)) do d
             (L * eq.vel[d] * R)[m, m]

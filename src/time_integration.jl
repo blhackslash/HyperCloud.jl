@@ -1,6 +1,18 @@
 export solve_equation, saveData!
 
 """
+    NoFallbackGrad <: DivergenceInterpolator
+
+Placeholder used by [`solve_equation`](@ref) when the time stepper exposes no
+`divergence_interpolator`: the CFL estimate falls back to a first-order MLS fit and the
+maximum consistency order is 1.
+"""
+struct NoFallbackGrad <: DivergenceInterpolator end
+HyperCloudCore._extract_order(::NoFallbackGrad) = 1
+HyperCloudCore._divergence_degree(::NoFallbackGrad) = 1
+HyperCloudCore.update_size!(::NoFallbackGrad, ::Int) = nothing
+
+"""
     saveData!(xs_storage, us_storage, ts_storage, snap_idx, pg, current_t, remove_ghosts)
 
 Extracts and archives the simulation state at a specific snapshot index.

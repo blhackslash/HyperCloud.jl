@@ -53,17 +53,12 @@ end
 """
     _get_user_project_root(mod::Module)
 
-Attempts to find the root directory. Resolves in order:
-1. `CONFIG_ROOT_OVERWRITE` (if explicitly set)
-2. The calling module's project root (`pkgdir`)
-3. The current working directory (`pwd()`)
+Root directory below which `CONFIG_SEARCH_PATHS` are searched: `CONFIG_ROOT_OVERWRITE` if it
+is set, otherwise the PDEStudioCore save path (`get_save_path()`, the working directory by default).
 """
 function _get_user_project_root(mod::Module)
-    if !isempty(CONFIG_ROOT_OVERWRITE[])
-        return CONFIG_ROOT_OVERWRITE[]
-    end
-    
-    root = get_save_path()
+    isempty(CONFIG_ROOT_OVERWRITE[]) || return CONFIG_ROOT_OVERWRITE[]
+    return get_save_path()
 end
 
 """
