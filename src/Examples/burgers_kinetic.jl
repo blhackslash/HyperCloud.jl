@@ -2,7 +2,7 @@ export burgers_kinetic
 
 function burgers_kinetic()
     varied_params = create_varied_dict()
-    push!(varied_params, :Grid_SEED => [10, 100, 1000, 10000]) 
+    push!(varied_params, :Grid_seed => [10, 100, 1000, 10000]) 
     
     base_methods = get_master_method_dict()
     
