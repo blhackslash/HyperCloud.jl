@@ -11,7 +11,7 @@ function advection_2d()
             # Global
             :snapshots => 25, 
             :remove_ghosts => false,
-            :sim_func_name => :run_simulation,
+            :sim_func_name => :run_direct_simulation,
             :tmax => 10.0, 
 
             # Time Namespace

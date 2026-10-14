@@ -1,20 +1,25 @@
 export QRiemann
 
 """
-    QRiemann{D, M, N_states} <: InitialCondition
+    QRiemann{D, M, N_states, T} <: InitialCondition
 
 Defines a multi-dimensional quadrant Riemann problem that partitions the domain into orthogonal regions intersecting at a central point.
 
 # Fields
-- `u_states::NTuple{N_states, State{M}}`: A tuple of constant physical states corresponding to each spatial quadrant.
-- `p0::Space{D}`: The central intersection point of the quadrants.
+- `u_states::NTuple{N_states, State{M, T}}`: A tuple of constant physical states corresponding to each spatial quadrant.
+- `p0::Space{D, T}`: The central intersection point of the quadrants.
 
 The state index is `1 + Σ_d 2^(d-1) * (pos[d] >= p0[d])`, so `u_states` must hold `2^D`
 states ordered by binary encoding. In 2D: `(bottom-left, bottom-right, top-left, top-right)`.
 """
-struct QRiemann{D, M, N_states} <: InitialCondition
-    u_states::NTuple{N_states, State{M}} 
-    p0::Space{D}
+struct QRiemann{D, M, N_states, T} <: InitialCondition
+    u_states::NTuple{N_states, State{M, T}}
+    p0::Space{D, T}
+end
+
+function QRiemann(u_states::NTuple{N, State{M}}, p0::Space{D}) where {D, M, N}
+    T = promote_type(eltype(p0), map(eltype, u_states)...)
+    return QRiemann{D, M, N, T}(u_states, p0)
 end
 
 function (ic::QRiemann{D, M, N})(pos::Space{D}) where {D, M, N}
