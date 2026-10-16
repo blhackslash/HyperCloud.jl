@@ -35,12 +35,11 @@ function saveData!(
     ts_storage[snap_idx] = T(current_t)
     N_active = pg.meta.N 
     
-    pos_array = get_positions(pg)
-    rho_array = pg.rhos
+    pos_array = host_view(get_positions(pg), N_active)
+    rho_array = host_view(pg.rhos, N_active)
     
     if remove_ghosts
-        active_boundary_view = @view pg.core.is_boundary[1:N_active]
-        indices = findall(.!active_boundary_view)
+        indices = findall(!, host_view(pg.core.is_boundary, N_active))
         N_save = length(indices)
         
         xs_storage[snap_idx] = Vector{Space{D, T}}(undef, N_save)

@@ -14,6 +14,7 @@ function run_kinetic_simulation(params::ParamDict)::Union{AbstractSimData, Nothi
         @info "--- Running Kinetic N-Dimensional Simulation ---"
         context = Dict{Symbol, Any}()
         context[:T] = T
+        context[:Storage] = storage_for(get_backend())   # a GPU backend runs on its device
         
         # 1. Extract Config Namespaces
         pde_conf    = extract_namespace(params, :PDE)
@@ -53,7 +54,7 @@ function run_kinetic_simulation(params::ParamDict)::Union{AbstractSimData, Nothi
         context[:Domain] = geom
         context[:WeightConf] = weight_conf
         
-        pg = build_particle_grid(grid_conf, context)      # also sets context[:Grid]
+        pg = build_run_grid(grid_conf, context)           # also sets context[:Grid]
         adaptivity = build_adaptivity(adapt_conf, context)
         
         # 5. Spatial Schemes

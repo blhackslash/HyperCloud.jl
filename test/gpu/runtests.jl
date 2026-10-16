@@ -1,8 +1,8 @@
-# Device checks of HyperCloud's physics (PDEs, ICs, builders, kinetic source terms) on HyperCloudCore's
-# KABackend(ROCBackend()). Each case mirrors run_direct_simulation / run_kinetic_simulation, but builds the
-# grid with context[:Storage] = ROCArray and steps a fixed number of times; the device run must reproduce a
-# PolyesterBackend host run. The runners themselves cannot target a device yet (no :Storage plumbing, and
-# set_initial_conditions! / saveData! index the grid arrays on the host), so the IC is set on the host here.
+# Device checks of HyperCloud on HyperCloudCore's KABackend(ROCBackend()); every device run must reproduce a
+# PolyesterBackend host run.
+#  - "pipeline": the runners' build steps with context[:Storage] = ROCArray, a fixed number of steps
+#    (isolates the physics: PDEs, ICs, builders, kinetic source terms);
+#  - "runner": complete run_direct_simulation / run_kinetic_simulation runs, snapshots compared.
 using HyperCloud, AMDGPU, StaticArrays, Test, LinearAlgebra
 using HyperCloud: get_D, get_M, extract_namespace, build_kinetic_system, set_initial_conditions!, build_ic, build_equation
 AMDGPU.allowscalar(false)
@@ -14,6 +14,7 @@ const device_backend = KABackend(ROCBackend())
 # Cases expected to fail, with the reason. Julia reports "Unexpected Pass" once they are fixed.
 const KNOWN_BROKEN = Dict(
     r"WENO" => "HyperCloudCore 0.6.0: WENO reconstruction is not kernel-compilable (dynamic basis_length / getindex in WENO.jl:88-94)",
+    r"sinusoidal mover" => "HyperCloudCore 0.6.0: the :sinusoidal mover closure captures T::Type (not isbits; Builders/movers.jl:20)",
 )
 is_broken(name) = any(occursin(k, name) for k in keys(KNOWN_BROKEN))
 
@@ -37,7 +38,7 @@ function build_pipeline(params, storage)
     end
     ctx[:Domain]     = build_domain(ns(:Grid), ctx)
     ctx[:WeightConf] = ns(:Weight)
-    pg = build_particle_grid(ns(:Grid), ctx)
+    pg = HC.build_run_grid(ns(:Grid), ctx)
     ctx[:Flux]    = build_flux(ns(:Flux), ctx)
     ctx[:Limiter] = build_limiter(ns(:Limiter), ctx)
     ctx[:MOOD]    = build_mood(ns(:MOOD), ctx)
@@ -55,10 +56,10 @@ function compare(params; nsteps = 10)
     set_backend!(PolyesterBackend())                                  # grids are built on the host
     eq, pg_h, ts_h, set_ic! = build_pipeline(params, Array)
     set_ic!(pg_h)
-    _, pg_d, ts_d, _ = build_pipeline(params, DeviceArray)
+    _, pg_d, ts_d, set_ic_d! = build_pipeline(params, DeviceArray)
+    set_ic_d!(pg_d)
     N = pg_h.meta.N
     @assert pg_d.meta.N == N && Array(pg_d.core.positions)[1:N] == pg_h.core.positions[1:N]
-    copyto!(pg_d.rhos, 1, DeviceArray(pg_h.rhos[1:N]), 1, N)
     cfl  = T(get(params, :Time_CFL, 0.2))
     dt_h = cfl * get_time_step(pg_h, eq, divinterp(ts_h))
     set_backend!(device_backend)
@@ -129,6 +130,36 @@ function lin_2d(periodic::Bool)
     return d
 end
 
+"Run `params` with the runner on the host and on the device and compare the snapshots."
+function compare_runner(params)
+    run = getfield(HyperCloud, params[:sim_func_name])
+    h = with_backend(() -> run(params), PolyesterBackend())
+    d = with_backend(() -> run(params), device_backend)
+    (h === nothing || d === nothing) && error("run failed (host: $(h !== nothing), device: $(d !== nothing))")
+    length(h.t) == length(d.t) || error("snapshot counts differ: $(length(h.t)) vs $(length(d.t))")
+    maxdiff(a, b) = maximum(k -> isempty(a[k]) ? 0.0 : maximum(i -> maximum(abs.(a[k][i] .- b[k][i])), eachindex(a[k])), eachindex(a))
+    all(k -> length(h.x[k]) == length(d.x[k]), eachindex(h.x)) || error("particle counts differ")
+    return (; diff = maxdiff(h.u, d.u), scale = maximum(k -> maximum(u -> maximum(abs, u), h.u[k]), eachindex(h.u)),
+              xdiff = maxdiff(h.x, d.x), dt_h = h.t[end], dt_d = d.t[end], nsnap = length(h.t),
+              N = length(h.x[end]), order_mismatches = 0, finite = all(k -> all(u -> all(isfinite, u), d.u[k]), eachindex(d.u)))
+end
+
+function check_runner(name, params; rtol = 1e-10)
+    occursin(Regex(get(ENV, "CASE", "")), name) || return
+    @testset "$name" begin
+        r = try
+            compare_runner(params)
+        catch e
+            push!(RESULTS, name => "ERROR: " * first(sprint(showerror, e), 200))
+            is_broken(name) ? (@test_broken false) : (@test false)
+            return
+        end
+        push!(RESULTS, name => r)
+        ok = r.finite && r.dt_d == r.dt_h && r.diff <= rtol * max(r.scale, 1) && r.xdiff <= rtol
+        is_broken(name) ? (@test_broken ok) : (@test ok)
+    end
+end
+
 const METHODS = sort!([(k, v) for (k, v) in get_master_method_dict() if haskey(v, :Time_stepper)]; by = first)
 const SOD     = HyperCloud.euler_1d_sod()
 
@@ -154,6 +185,34 @@ try
                 check("2d periodic=$periodic | $n", merge(lin_2d(periodic), m))
             end
         end
+        @testset "Runners" begin
+            enable_progress_bar!(false)
+            mood = Dict{Symbol, Any}(:MOOD_delta_relax => 1e-6)
+            check_runner("runner | lin1d RK3 MUSCL3 MOOD", merge(LIN_1D, last(create_method(:RK3, :MUSCL, 3; mood_criterion = :U1)), mood))
+            check_runner("runner | lin1d ARS222 MUSCL2 kinetic", merge(LIN_1D, last(create_method(:ARS222, :MUSCL, 2))))
+            check_runner("runner | lin1d ARS222 MUSCL2 kinetic save_relax", merge(LIN_1D, last(create_method(:ARS222, :MUSCL, 2)), Dict{Symbol, Any}(:save_relax => true)))
+            for (n, m) in sort!([(k, v) for (k, v) in SOD.methods if haskey(v, :Time_stepper)]; by = first)
+                check_runner("runner | sod $n", merge(SOD.shared, m))
+            end
+            check_runner("runner | sod RK2Upwind1 keep ghosts", merge(SOD.shared, SOD.methods[:RK2Upwind1], Dict{Symbol, Any}(:remove_ghosts => false)))
+            for periodic in (true, false)
+                check_runner("runner | 2d periodic=$periodic RK3 MUSCL3 MOOD", merge(lin_2d(periodic), last(create_method(:RK3, :MUSCL, 3; mood_criterion = :U1))))
+                check_runner("runner | 2d periodic=$periodic ARS222 MUSCL2 kinetic", merge(lin_2d(periodic), last(create_method(:ARS222, :MUSCL, 2))))
+            end
+            lagr = Dict{Symbol, Any}(:Grid_mover => :lagrangian)
+            check_runner("runner | burgers lagrangian mover", merge(BURGERS_1D, last(create_method(:RK2, :MUSCL, 2)), lagr))
+            check_runner("runner | sod lagrangian mover", merge(SOD.shared, SOD.methods[:RK2MUSCL2_U1_EPD1], lagr))
+            check_runner("runner | sod lagrangian mover + adaptivity", merge(SOD.shared, SOD.methods[:RK2MUSCL2_U1_EPD1], lagr, Dict{Symbol, Any}(:Adapt_enabled => true)))
+            check_runner("runner | sod scaled lagrangian mover + adaptivity", merge(SOD.shared, SOD.methods[:RK2MUSCL2_U1_EPD1],
+                         Dict{Symbol, Any}(:Grid_mover => :scaled_lagrangian, :Grid_mover_alpha => 0.5, :Adapt_enabled => true)))
+            check_runner("runner | lin1d sinusoidal mover", merge(LIN_1D, last(create_method(:RK2, :MUSCL, 2)), Dict{Symbol, Any}(:Grid_mover => :sinusoidal, :Grid_mover_amplitude => 0.02)))
+            check_runner("runner | 2d MLS volumes", merge(lin_2d(true), last(create_method(:RK2, :MUSCL, 2)), Dict{Symbol, Any}(:Grid_volumes => :mls)))
+            check_runner("runner | 2d MLS volumes, sinusoidal mover", merge(lin_2d(true), last(create_method(:RK2, :MUSCL, 2)),
+                         Dict{Symbol, Any}(:Grid_volumes => :mls, :Grid_mover => :sinusoidal, :Grid_mover_amplitude => 0.02)))
+            check_runner("runner | f32 lin1d RK2 MUSCL2", merge(LIN_1D, last(create_method(:RK2, :MUSCL, 2)), Dict{Symbol, Any}(:T => Float32)); rtol = 1e-5)
+            check_runner("runner | lin1d RK2WENO2", merge(LIN_1D, get_master_method_dict()["RK2WENO2"]))
+            enable_progress_bar!(true)
+        end
         @testset "Float32" begin
             check("f32 | RK2 MUSCL2", merge(LIN_1D, last(create_method(:RK2, :MUSCL, 2)), Dict{Symbol, Any}(:T => Float32)); rtol = 1e-5)
         end
@@ -163,7 +222,8 @@ finally
     println("\n", "="^30, " results (max |u_dev - u_host|, scale, dt_dev/dt_host - 1, MOOD order mismatches)")
     for (n, r) in RESULTS
         s = r isa String ? r : string("diff=", round(r.diff; sigdigits = 3), "  scale=", round(r.scale; sigdigits = 3),
-                                      "  ddt=", round(r.dt_d / r.dt_h - 1; sigdigits = 3), "  mood≠=", r.order_mismatches)
+                                      "  ddt=", round(r.dt_d / r.dt_h - 1; sigdigits = 3),
+                                      haskey(r, :nsnap) ? "  xdiff=$(round(r.xdiff; sigdigits = 3))  N=$(r.N)" : "  mood≠=$(r.order_mismatches)")
         println(rpad(n, 52), s)
     end
 end

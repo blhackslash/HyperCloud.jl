@@ -932,6 +932,25 @@ end
         @test abs(err32 - err64) < 1e-3
     end
 
+    @testset "Lagrangian mover uses the PDE's fluid velocity" begin
+        config = euler_1d_sod()
+        params = merge(config.shared, config.methods[:RK2MUSCL2_U1_EPD1], Dict{Symbol, Any}(:Grid_mover => :lagrangian))
+        err, sim = l1_error(params)
+        @test sim !== nothing
+        @test err < 0.1
+        sim === nothing || @test sim.x[end] != sim.x[1]           # the particles moved with the flow
+    end
+
+    @testset "Execution backend helpers" begin
+        @test storage_for(PolyesterBackend()) === Array
+        @test storage_for(ThreadsBackend()) === Array
+        @test storage_for(KABackend(HyperCloudCore.KA.CPU())) === Array
+        previous = get_backend()
+        @test with_backend(get_backend, ThreadsBackend()) isa ThreadsBackend
+        @test_throws ErrorException with_backend(() -> error("boom"), ThreadsBackend())
+        @test get_backend() === previous                            # restored, also after an error
+    end
+
     @testset "Spherical WENO & progress logging" begin
         # Disable the progress bar and force frequent @info logs
         enable_progress_bar!(false)

@@ -31,6 +31,33 @@ the states and `sim.t[k]` the time of snapshot `k`.
     return `nothing`. Always check the result, e.g. `@assert sim !== nothing`, when calling them
     directly.
 
+## Running on a GPU
+
+The runners place a run where HyperCloudCore's execution backend runs ([`storage_for`](@ref)).
+The CPU backends (`PolyesterBackend()`, the default, `ThreadsBackend()` and
+`KernelAbstractions.CPU()`) keep the run in host memory. With a GPU backend, the grid, the scheme
+and the time stepper live on the device (`context[:Storage]`). No parameter changes, so a GPU run
+has the same parameter hash as its CPU counterpart:
+
+```julia
+using HyperCloud, AMDGPU          # or CUDA / Metal / oneAPI
+set_backend!(ROCBackend())
+sim = run_direct_simulation(params)
+set_backend!(PolyesterBackend())  # back to the CPU
+```
+
+- The grid is constructed on the host and then moved to the device; the time steps (neighbour
+  search, MOOD, boundary conditions, CFL estimate) run there.
+- Initial conditions are evaluated on the host and copied over once; each snapshot copies the
+  active particles back. The returned `sim` therefore holds plain host arrays.
+- Particle adaptivity works; a step that actually inserts or merges particles copies the grid to the
+  host and back.
+- Not available on a device yet (HyperCloudCore 0.6.0): the `:WENO` scheme (compiled with a runtime
+  stencil size) and the `:sinusoidal` grid mover (its velocity closure is not a bits type).
+- Custom equations, initial conditions and source terms that run inside the time step must
+  follow the kernel rules (bits types, no allocation, no dynamic dispatch). Initial conditions only
+  run on the host.
+
 ## Direct simulation
 
 [`run_direct_simulation`](@ref) evolves the PDE given in the `PDE` namespace.
@@ -62,4 +89,6 @@ linear kinetic system with ``N_K`` variables plus a stiff relaxation term (see
 run_direct_simulation
 run_kinetic_simulation
 extract_namespace
+storage_for
+with_backend
 ```

@@ -35,7 +35,7 @@ to `false`.
 The runners take both settings from global switches: `enable_progress_bar!(false)` and
 `set_progress_interval!(seconds)`.
 
-The loop also logs whether parallel loops use `@threads` or `@batch`.
+The loop also logs the execution backend of the parallel loops (see `set_backend!`).
 
 ## Return value
 
