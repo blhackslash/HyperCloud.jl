@@ -3,7 +3,7 @@
 #  - "pipeline": the runners' build steps with context[:Storage] = ROCArray, a fixed number of steps
 #    (isolates the physics: PDEs, ICs, builders, kinetic source terms);
 #  - "runner": complete run_direct_simulation / run_kinetic_simulation runs, snapshots compared.
-using HyperCloud, AMDGPU, StaticArrays, Test, LinearAlgebra
+using HyperCloud, AMDGPU, StaticArrays, Test, LinearAlgebra, Logging
 using HyperCloud: get_D, get_M, extract_namespace, build_kinetic_system, set_initial_conditions!, build_ic, build_equation
 AMDGPU.allowscalar(false)
 const HC = HyperCloud
@@ -165,6 +165,27 @@ const SOD     = HyperCloud.euler_1d_sod()
 
 try
     @testset "HyperCloud on $(AMDGPU.device())" begin
+        # First, before any other device run: with HyperCloudCore 0.6.0 / AMDGPU 2.9.1 a reservation after
+        # earlier device runs in the process can zero grid buffers (the runners detect it and refuse to run).
+        @testset "Memory limit" begin
+            enable_progress_bar!(false)
+            try
+                set_memory_limit!(2^30; slots_per_particle = 19)            # reserved once, nothing grows
+                sod_adapt = merge(SOD.shared, SOD.methods[:RK2MUSCL2_U1_EPD1], Dict{Symbol, Any}(:Grid_mover => :lagrangian, :Adapt_enabled => true))
+                check_runner("runner | sod lagrangian mover + adaptivity, memory limit", sod_adapt)
+                # A further reserved device run in the same process: correct, or refused by the runner's check.
+                @testset "second reserved device run: correct or refused" begin
+                    logs, sim = Test.collect_test_logs(min_level = Logging.Error) do
+                        with_backend(() -> run_direct_simulation(merge(lin_2d(false), last(create_method(:ARS222, :MUSCL, 2)))), device_backend)
+                    end
+                    refused = any(l -> occursin("memory reservation corrupted", sprint(showerror, first(l.kwargs[:exception]))), logs)
+                    push!(RESULTS, "runner | second reserved device run" => (sim !== nothing ? "ran" : refused ? "refused by the corruption check" : "FAILED otherwise"))
+                    @test sim !== nothing || refused
+                end
+            finally
+                set_memory_limit!(nothing)
+            end
+        end
         @testset "1D linear advection, box IC" begin
             for (n, m) in METHODS; check("lin1d | $n", merge(LIN_1D, m)); end
         end

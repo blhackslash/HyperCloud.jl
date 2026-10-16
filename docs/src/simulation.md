@@ -58,6 +58,28 @@ set_backend!(PolyesterBackend())  # back to the CPU
   follow the kernel rules (bits types, no allocation, no dynamic dispatch). Initial conditions only
   run on the host.
 
+### Memory limit
+
+By default the buffers of a run grow on demand; growing a buffer briefly holds the old and the new
+array at once, which is where a run on a nearly full device fails. `set_memory_limit!(bytes)`
+instead sizes every buffer of the following runs once, to the largest particle capacity under the
+limit (HyperCloudCore's `reserve!`), and a run that outgrows it stops with a `CapacityError`:
+
+```julia
+set_memory_limit!(12 * 2^30; slots_per_particle = 40)   # 12 GiB; room for neighbourhoods to grow
+sim = run_direct_simulation(params)                       # stats: reserved_particles, reserved_bytes
+set_memory_limit!(nothing)
+```
+
+Like the backend it is a session setting, not a parameter, so it does not change the run hash.
+`slots_per_particle` defaults to what the initial neighbour lists need; raise it for moving or adaptive
+grids.
+
+!!! warning "Device reservations (HyperCloudCore 0.6.0, AMDGPU 2.9.1)"
+    A reservation on a device can zero grid buffers when earlier device runs happened in the same
+    Julia session. The runners compare the grid before and after the reservation and refuse to run
+    when it changed. Until this is fixed upstream, start reserved GPU runs in a fresh session.
+
 ## Direct simulation
 
 [`run_direct_simulation`](@ref) evolves the PDE given in the `PDE` namespace.
@@ -91,4 +113,6 @@ run_kinetic_simulation
 extract_namespace
 storage_for
 with_backend
+set_memory_limit!
+get_memory_limit
 ```

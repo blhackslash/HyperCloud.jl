@@ -951,6 +951,26 @@ end
         @test get_backend() === previous                            # restored, also after an error
     end
 
+    @testset "Memory limit" begin
+        params = merge(linear_1d_gauss(100), UPWIND1)
+        try
+            set_memory_limit!(64 * 2^20; tolerance = 0.1)
+            @test get_memory_limit() == (; limit = 64 * 2^20, tolerance = 0.1, slots_per_particle = nothing)
+            sim = run_sim(params)
+            @test sim !== nothing
+            if sim !== nothing
+                @test sim.stats[:reserved_particles][1] >= length(sim.x[end])
+                @test sim.stats[:reserved_bytes][1] <= 0.9 * 64 * 2^20
+            end
+            set_memory_limit!(10_000)                               # cannot hold 100 particles
+            @test (@test_logs (:error, r"Error during Direct Simulation") match_mode = :any run_sim(params)) === nothing
+        finally
+            set_memory_limit!(nothing)
+        end
+        @test get_memory_limit() === nothing
+        @test_throws ArgumentError set_memory_limit!(0)
+    end
+
     @testset "Spherical WENO & progress logging" begin
         # Disable the progress bar and force frequent @info logs
         enable_progress_bar!(false)

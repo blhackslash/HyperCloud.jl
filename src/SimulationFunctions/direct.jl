@@ -15,6 +15,7 @@ function run_direct_simulation(params::ParamDict)::Union{AbstractSimData, Nothin
         context = Dict{Symbol, Any}()
         context[:T] = T
         context[:Storage] = storage_for(get_backend())   # a GPU backend runs on its device
+        apply_memory_limit!(context)                      # set_memory_limit!: reserve the buffers once
         
         # 1. Extract Config Namespaces
         pde_conf    = extract_namespace(params, :PDE)
@@ -55,7 +56,8 @@ function run_direct_simulation(params::ParamDict)::Union{AbstractSimData, Nothin
         
         # 5. Time Stepper
         context[:Tableau] = build_tableau(time_conf, context)
-        method = build_timestepper(context; time_conf = time_conf)
+        method = build_run_timestepper(context; time_conf = time_conf)
+        _log_memory(context)
         
         # 6. Initialization
         IC = build_ic(ic_conf, context)
@@ -83,6 +85,7 @@ function run_direct_simulation(params::ParamDict)::Union{AbstractSimData, Nothin
         add_stat!(sim_data, :Runtime, elapsed_time, :none)
         add_stat!(sim_data, :k_step, Float64(k_step), :none)
         add_stat!(sim_data, :final_particle_count, Float64(pg.meta.N), :none)
+        record_memory!(sim_data, context)
         
         return sim_data
 
