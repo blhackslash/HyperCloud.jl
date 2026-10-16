@@ -112,7 +112,7 @@ function solve_equation(
     saveData!(xs, us, ts, snap_counter, pg, t, remove_ghosts)
     snap_counter += 1 
     
-    @info "Using $(get_use_threads() ? "@threads" : "@batch") for parallel runs!"
+    @info "Using $(nameof(typeof(get_backend()))) for parallel runs!"
 
     p = Progress(10000, desc="Running Simulation...", dt=progress_interval, enabled=show_progress)
     

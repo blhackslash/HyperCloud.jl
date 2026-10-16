@@ -15,7 +15,7 @@ StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 
 [compat]
 Dates = "1"
-HyperCloudCore = "0.5.1"
+HyperCloudCore = "0.6"
 PDEStudioCore = "0.4"
 ProgressMeter = "1"
 Random = "1"

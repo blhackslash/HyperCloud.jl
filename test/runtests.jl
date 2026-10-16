@@ -14,6 +14,20 @@ if RUN_GUI_TESTS
     using GLMakie
 end
 
+# Execution backend of the HyperCloudCore per-particle loops: polyester (default), threads or ka_cpu
+# (KernelAbstractions kernels on the host).
+const TEST_BACKEND = get(ENV, "HYPERCLOUD_BACKEND", "polyester")
+if TEST_BACKEND == "polyester"
+    set_backend!(PolyesterBackend())
+elseif TEST_BACKEND == "threads"
+    set_backend!(ThreadsBackend())
+elseif TEST_BACKEND == "ka_cpu"
+    set_backend!(HyperCloudCore.KA.CPU())
+else
+    error("HYPERCLOUD_BACKEND=$(TEST_BACKEND) is not supported (polyester, threads, ka_cpu)")
+end
+@info "Testing with $(get_backend()) on $(Threads.nthreads()) threads"
+
 # =========================================================================
 # 0. MOCK MODULES (must be defined at top-level scope)
 # =========================================================================
