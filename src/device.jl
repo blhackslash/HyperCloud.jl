@@ -106,18 +106,18 @@ end
     build_run_timestepper(context; time_conf) -> TimeStepper
 
 `build_timestepper`, which also performs the memory reservation. On a device grid the reservation is
-verified: with HyperCloudCore 0.6.0 and AMDGPU 2.9.1, `reserve!` can return with zeroed grid buffers when
-earlier device runs happened in the same process (allocator reuse, not yet understood). A changed grid
-throws instead of silently running on corrupted data.
+verified: with HyperCloudCore 0.6.0 and AMDGPU 2.9.1 (ROCm 7.2, gfx1201), `reserve!` returns with zeroed grid
+buffers when earlier device runs happened in the same process (the data copied into the newly allocated
+buffers is lost shortly after the copy; a ROCm / AMDGPU.jl issue, see the HyperCloudCore GPU roadmap). A
+changed grid throws instead of silently running on corrupted data; run in a fresh session.
 """
 function build_run_timestepper(context::Dict; time_conf::Dict = Dict{Symbol, Any}())
     checked = haskey(context, :MemoryLimit) && storage_type(context) !== Array
     before  = checked ? _grid_fingerprint(context[:Grid]) : nothing
     ts = build_timestepper(context; time_conf = time_conf)
     if checked && !isequal(_grid_fingerprint(context[:Grid]), before)   # isequal: padding slots may hold NaN
-        error("the memory reservation corrupted the device grid (known issue of HyperCloudCore 0.6.0 / " *
-              "AMDGPU 2.9.1 after earlier device runs in this process): run in a fresh Julia session or " *
-              "without `set_memory_limit!`")
+        error("the memory reservation corrupted the device grid (seen with HyperCloudCore 0.6.0 / AMDGPU 2.9.1 " *
+              "after earlier device runs in this process): run in a fresh Julia session or without `set_memory_limit!`")
     end
     return ts
 end

@@ -11,11 +11,9 @@ const HC = HyperCloud
 const DeviceArray    = ROCArray
 const device_backend = KABackend(ROCBackend())
 
-# Cases expected to fail, with the reason. Julia reports "Unexpected Pass" once they are fixed.
-const KNOWN_BROKEN = Dict(
-    r"WENO" => "HyperCloudCore 0.6.0: WENO reconstruction is not kernel-compilable (dynamic basis_length / getindex in WENO.jl:88-94)",
-    r"sinusoidal mover" => "HyperCloudCore 0.6.0: the :sinusoidal mover closure captures T::Type (not isbits; Builders/movers.jl:20)",
-)
+# Cases expected to fail, with the reason. Julia reports "Unexpected Pass" once they are fixed. (Empty since the
+# WENO kernel and the :sinusoidal mover were fixed in HyperCloudCore after 0.6.0.)
+const KNOWN_BROKEN = Dict{Regex, String}()
 is_broken(name) = any(occursin(k, name) for k in keys(KNOWN_BROKEN))
 
 "Build every pipeline component for `params` on `storage`; returns (eq, pg, ts, set_ic!)."
