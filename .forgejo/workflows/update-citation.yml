@@ -14,8 +14,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.BOT_PAT }}
 
       - name: Update and push CITATION.cff via Forgejo API
         env:
@@ -24,6 +22,11 @@ jobs:
           REPO: ${{ github.repository }}
           BRANCH: ${{ github.ref_name }}
         run: |
+          if [ -z "$BOT_PAT" ]; then
+            echo "::error::Secret BOT_PAT is empty! Make sure it is added under Repository Settings -> Actions -> Secrets (or the repo owner's User/Org Action Secrets)."
+            exit 1
+          fi
+
           node - << 'EOF'
           const fs = require('fs');
 
