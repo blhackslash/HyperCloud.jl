@@ -60,6 +60,15 @@ end
     end)
 end
 
+"Admissible conservative Euler state (MOOD PAD): finite, positive density and pressure."
+@inline function is_admissible(eq::EulerEquation{D, M, T, <:Conservative}, U::State{M, T}) where {D, M, T}
+    all(isfinite, U) || return false
+    rho = U[1]
+    rho > zero(T) || return false
+    m_sq = sum(abs2, ntuple(i -> U[1+i], Val(D)))
+    return (eq.gamma - one(T)) * (U[M] - T(0.5) * m_sq / rho) > zero(T)
+end
+
 @inline function max_eigenvalue(eq::EulerEquation{D, M, T, <:Conservative}, U::State{M, T}, d::Int) where {D, M, T}
     rho = max(U[1], T(1e-9))
     m_d = U[1+d]

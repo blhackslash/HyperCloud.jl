@@ -5,7 +5,7 @@ using Reexport
 @reexport using PDEStudioCore
 @reexport using HyperCloudCore
 
-import HyperCloudCore: flux, max_eigenvalue, prim2cons, cons2prim, velocity, fluid_velocity, implicit_solve, evaluate_source, pre_solve_update!
+import HyperCloudCore: flux, max_eigenvalue, is_admissible, prim2cons, cons2prim, velocity, fluid_velocity, implicit_solve, evaluate_source, pre_solve_update!
 
 using StaticArrays
 using LinearAlgebra
