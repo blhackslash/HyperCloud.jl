@@ -506,6 +506,13 @@ end
         # Positivity floors in cons2prim
         Vbad = HC.cons2prim(eq, State{4, Float64}(1.0, 0.0, 0.0, -1.0))
         @test Vbad[4] ≈ 1e-7
+
+        # Admissibility (MOOD PAD): positive density and pressure, finite
+        @test HC.is_admissible(eq, U)
+        @test !HC.is_admissible(eq, State{4, Float64}(1.0, 0.0, 0.0, -1.0))            # p < 0
+        @test !HC.is_admissible(eq, State{4, Float64}(1.0, 2.0, 0.0, 1.0))             # kinetic energy > E
+        @test !HC.is_admissible(eq, State{4, Float64}(-1.0, 0.0, 0.0, 1.0))            # ρ < 0
+        @test !HC.is_admissible(eq, State{4, Float64}(NaN, 0.0, 0.0, 1.0))
     end
 end
 
