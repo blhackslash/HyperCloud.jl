@@ -14,6 +14,8 @@ function run_kinetic_simulation(params::ParamDict)::Union{AbstractSimData, Nothi
         @info "--- Running Kinetic N-Dimensional Simulation ---"
         context = Dict{Symbol, Any}()
         context[:T] = T
+        context[:Storage] = storage_for(get_backend())   # a GPU backend runs on its device
+        apply_memory_limit!(context)                      # set_memory_limit!: reserve the buffers once
         
         # 1. Extract Config Namespaces
         pde_conf    = extract_namespace(params, :PDE)
@@ -53,7 +55,7 @@ function run_kinetic_simulation(params::ParamDict)::Union{AbstractSimData, Nothi
         context[:Domain] = geom
         context[:WeightConf] = weight_conf
         
-        pg = build_particle_grid(grid_conf, context)      # also sets context[:Grid]
+        pg = build_run_grid(grid_conf, context)           # also sets context[:Grid]
         adaptivity = build_adaptivity(adapt_conf, context)
         
         # 5. Spatial Schemes
@@ -64,7 +66,8 @@ function run_kinetic_simulation(params::ParamDict)::Union{AbstractSimData, Nothi
         
         # 6. Time Stepper
         context[:Tableau] = build_tableau(time_conf, context)
-        method = build_timestepper(context; time_conf = time_conf)
+        method = build_run_timestepper(context; time_conf = time_conf)
+        _log_memory(context)
         
         # 7. Initialization
         set_initial_conditions!(pg, source_term, IC, eq_macro)
@@ -100,6 +103,7 @@ function run_kinetic_simulation(params::ParamDict)::Union{AbstractSimData, Nothi
         add_stat!(sim_data, :Runtime, elapsed_time, :none)
         add_stat!(sim_data, :k_step, Float64(k_step), :none)
         add_stat!(sim_data, :final_particle_count, Float64(pg.meta.N), :none)
+        record_memory!(sim_data, context)
         
         return sim_data
 

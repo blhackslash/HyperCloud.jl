@@ -125,12 +125,12 @@ function set_initial_conditions!(
     eq_macro::HyperbolicPDE{D}
 ) where {D, NM, NK}
     
-    for p_idx in 1:pg.meta.N
-        u_val = IC(pg.core.positions[p_idx]) # Macro State{NM}
+    set_states!(pg) do pos
+        u_val = IC(pos)                      # Macro State{NM}
         flux_vals = flux(eq_macro, u_val)    # Flux{D, NM}
         
         # Build the initial kinetic SVector component-by-component
-        pg.rhos[p_idx] = State{NK}(ntuple(Val(NK)) do k
+        State{NK}(ntuple(Val(NK)) do k
             m_idx = st.km(k)
             f_dot_inv_lambda = flux_dot(flux_vals, m_idx, st.scaled_inv_speeds[k])
             

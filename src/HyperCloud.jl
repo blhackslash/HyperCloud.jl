@@ -5,7 +5,7 @@ using Reexport
 @reexport using PDEStudioCore
 @reexport using HyperCloudCore
 
-import HyperCloudCore: flux, max_eigenvalue, prim2cons, cons2prim, velocity, implicit_solve, evaluate_source, pre_solve_update!
+import HyperCloudCore: flux, max_eigenvalue, is_admissible, prim2cons, cons2prim, velocity, fluid_velocity, implicit_solve, evaluate_source, pre_solve_update!
 
 using StaticArrays
 using LinearAlgebra
@@ -19,6 +19,7 @@ const _PROGRESS_INTERVAL= Ref(1.)
 enable_progress_bar!(b::Bool) = (_PROGRESS_BAR[] = b)
 set_progress_interval!(t::Real) = (_PROGRESS_INTERVAL[] = Float64(t))
 
+include("device.jl")
 include("ICs/_main.jl")
 include("PDEs/_main.jl")
 include("SourceTerms/_main.jl")

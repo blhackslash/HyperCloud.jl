@@ -19,12 +19,8 @@ Evaluates the initial condition functor and applies it to the particle grid.
   the kinetic variables directly in the Maxwellian equilibrium, component by component.
 """
 function set_initial_conditions!(pg::ParticleGrid{D, M}, eq::HyperbolicPDE, IC::InitialCondition) where {D, M}
-    positions = pg.core.positions
-
-    @inbounds for i in 1:pg.meta.N
-        # Strict assignment: IC(pos) must return a State{M}
-        pg.rhos[i] = IC(positions[i])
-    end
+    # IC(pos) must return a State{M}
+    set_states!(IC, pg)
     return nothing
 end
 

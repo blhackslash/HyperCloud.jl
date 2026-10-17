@@ -25,7 +25,12 @@ function Riemann(uL::State{M}, uR::State{M}, p0::Space{D}, n::Space{D}) where {D
     return Riemann{D, M, T}(uL, uR, p0, n)
 end
 
-(ic::Riemann)(pos::Space{D}) where {D} = dot(pos - ic.p0, ic.n) < 0 ? ic.uL : ic.uR
+# The signed distance is summed without `dot`, which uses `muladd`: a fused multiply-add rounds differently
+# from mul + add, and whether `muladd` fuses depends on the compiled context, so a particle exactly on the
+# hyperplane got different states from the runner and from the analytic reference.
+@inline signed_distance(ic::Riemann{D}, pos::Space{D}) where {D} =
+    sum(ntuple(d -> (pos[d] - ic.p0[d]) * ic.n[d], Val(D)))
+(ic::Riemann{D})(pos::Space{D}) where {D} = signed_distance(ic, pos) < 0 ? ic.uL : ic.uR
 
 function build_ic(::Val{:riemann}, conf::Dict, ctx::Dict)
     T, D, M = ctx[:T]::DataType, ctx[:D]::Int, ctx[:M]::Int

@@ -1,0 +1,19 @@
+# Environment of the device checks (opt-in, not part of Pkg.test). Instantiate once with
+#     julia --project=test/gpu -e 'using Pkg; Pkg.instantiate()'
+# and run with
+#     julia -t auto --project=test/gpu test/gpu/runtests.jl
+# CASE=<regex> restricts the run to matching case names.
+
+[deps]
+AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
+HyperCloud = "46243fee-3493-4f45-a265-764054f6ddcc"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[sources]
+HyperCloud = {path = "../.."}
+
+[compat]
+AMDGPU = "2.9"

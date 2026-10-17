@@ -14,6 +14,20 @@ if RUN_GUI_TESTS
     using GLMakie
 end
 
+# Execution backend of the HyperCloudCore per-particle loops: polyester (default), threads or ka_cpu
+# (KernelAbstractions kernels on the host).
+const TEST_BACKEND = get(ENV, "HYPERCLOUD_BACKEND", "polyester")
+if TEST_BACKEND == "polyester"
+    set_backend!(PolyesterBackend())
+elseif TEST_BACKEND == "threads"
+    set_backend!(ThreadsBackend())
+elseif TEST_BACKEND == "ka_cpu"
+    set_backend!(HyperCloudCore.KA.CPU())
+else
+    error("HYPERCLOUD_BACKEND=$(TEST_BACKEND) is not supported (polyester, threads, ka_cpu)")
+end
+@info "Testing with $(get_backend()) on $(Threads.nthreads()) threads"
+
 # =========================================================================
 # 0. MOCK MODULES (must be defined at top-level scope)
 # =========================================================================
@@ -492,6 +506,13 @@ end
         # Positivity floors in cons2prim
         Vbad = HC.cons2prim(eq, State{4, Float64}(1.0, 0.0, 0.0, -1.0))
         @test Vbad[4] ≈ 1e-7
+
+        # Admissibility (MOOD PAD): positive density and pressure, finite
+        @test HC.is_admissible(eq, U)
+        @test !HC.is_admissible(eq, State{4, Float64}(1.0, 0.0, 0.0, -1.0))            # p < 0
+        @test !HC.is_admissible(eq, State{4, Float64}(1.0, 2.0, 0.0, 1.0))             # kinetic energy > E
+        @test !HC.is_admissible(eq, State{4, Float64}(-1.0, 0.0, 0.0, 1.0))            # ρ < 0
+        @test !HC.is_admissible(eq, State{4, Float64}(NaN, 0.0, 0.0, 1.0))
     end
 end
 
@@ -916,6 +937,45 @@ end
         @test s32 !== nothing
         @test isfinite(err32)
         @test abs(err32 - err64) < 1e-3
+    end
+
+    @testset "Lagrangian mover uses the PDE's fluid velocity" begin
+        config = euler_1d_sod()
+        params = merge(config.shared, config.methods[:RK2MUSCL2_U1_EPD1], Dict{Symbol, Any}(:Grid_mover => :lagrangian))
+        err, sim = l1_error(params)
+        @test sim !== nothing
+        @test err < 0.1
+        sim === nothing || @test sim.x[end] != sim.x[1]           # the particles moved with the flow
+    end
+
+    @testset "Execution backend helpers" begin
+        @test storage_for(PolyesterBackend()) === Array
+        @test storage_for(ThreadsBackend()) === Array
+        @test storage_for(KABackend(HyperCloudCore.KA.CPU())) === Array
+        previous = get_backend()
+        @test with_backend(get_backend, ThreadsBackend()) isa ThreadsBackend
+        @test_throws ErrorException with_backend(() -> error("boom"), ThreadsBackend())
+        @test get_backend() === previous                            # restored, also after an error
+    end
+
+    @testset "Memory limit" begin
+        params = merge(linear_1d_gauss(100), UPWIND1)
+        try
+            set_memory_limit!(64 * 2^20; tolerance = 0.1)
+            @test get_memory_limit() == (; limit = 64 * 2^20, tolerance = 0.1, slots_per_particle = nothing)
+            sim = run_sim(params)
+            @test sim !== nothing
+            if sim !== nothing
+                @test sim.stats[:reserved_particles][1] >= length(sim.x[end])
+                @test sim.stats[:reserved_bytes][1] <= 0.9 * 64 * 2^20
+            end
+            set_memory_limit!(10_000)                               # cannot hold 100 particles
+            @test (@test_logs (:error, r"Error during Direct Simulation") match_mode = :any run_sim(params)) === nothing
+        finally
+            set_memory_limit!(nothing)
+        end
+        @test get_memory_limit() === nothing
+        @test_throws ArgumentError set_memory_limit!(0)
     end
 
     @testset "Spherical WENO & progress logging" begin
