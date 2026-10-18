@@ -30,6 +30,8 @@ In a configuration: `:PDE_name => :linear, :PDE_velocities => ((1.0,), (1.0,))`.
 - **Wave speeds.** The constructor precomputes the spectral radius of every ``A_d``;
   `max_eigenvalue` returns it without any work at run time.
 - **Variables.** `prim2cons` and `cons2prim` are the identity.
+- **Moving grids.** For scalar equations (`M = 1`), `fluid_velocity` returns the advection
+  velocity; a Lagrangian grid then carries the solution exactly.
 - **Flux.** ``F_d(U) = A_d U``; `velocity(eq, U, d)` returns ``A_d``.
 - **Kinetic use.** `kinetic_wave_speed(eq, d, k)` returns the diagonal entry
   ``(A_d)_{kk}``. It is meaningful for diagonal systems, which is how kinetic relaxation

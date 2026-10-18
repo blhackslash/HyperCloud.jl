@@ -27,6 +27,11 @@ given as conservative variables.
   a ``10^{-9}`` floor on density and pressure. For `Conservative` it expects conservative
   variables; for an `NCRepresentation` it expects primitive variables.
 
+- **Admissibility.** [`is_admissible`](@ref) accepts finite conservative states with positive
+  density and pressure. MOOD flags every candidate that fails it, whatever its criterion says
+  (HyperCloudCore's [PAD](@extref HyperCloudCore Physical-admissibility-detection-(PAD))).
+- **Moving grids.** `fluid_velocity` returns ``\vec u``, so the Lagrangian movers work.
+
 ## Exact solution: 1D Riemann problem
 
 For `Riemann` initial data in 1D the closure computes the exact solution (e.g. for the Sod
@@ -47,4 +52,5 @@ is floored at ``10^{-9}``.
 
 ```@docs
 EulerEquation
+HyperCloudCore.is_admissible(::EulerEquation{D, M, T, <:Conservative}, ::State{M, T}) where {D, M, T}
 ```

@@ -8,8 +8,10 @@ transport plus a stiff source term.
 
 HyperCloud is part of the **PDEStudio** ecosystem:
 
-- `HyperCloudCore.jl` provides the numerical engine (particle grids, interpolators, time
-  steppers, boundary conditions).
+- [HyperCloudCore.jl](@extref HyperCloudCore HyperCloudCore:-A-Meshfree-Hyperbolic-Solver)
+  provides the numerical engine (particle grids, MLS schemes, MOOD, time steppers, boundary
+  conditions, GPU backends) and the [config-driven builders](@extref HyperCloudCore Config-Driven-Builders)
+  that HyperCloud's runners call. HyperCloud re-exports it.
 - `PDEStudioCore.jl` runs batches of simulations, caches results on disk under a hash of
   their parameters, and computes error statistics.
 - `PDEStudio.jl` plots the results, either locally (`GLMakie`) or in the browser from a
@@ -72,10 +74,11 @@ Every available key is listed in the [Configuration Reference](configuration.md)
 | `PDEs/` | Equation definitions (linear advection, Burgers, Euler) and their exact solutions. |
 | `SourceTerms/` | Source terms, currently the kinetic relaxation term. |
 | `ICs/` | Initial conditions: Gaussian pulse, box, sine wave and three Riemann variants. |
-| `Builder/` | `build_*` functions that turn a flat parameter dictionary into solver components. |
+| `Builder/` | The physics builders (`build_equation`, `build_kinetic_system`) and the exact references; the numerical builders come from HyperCloudCore (see [Builder API](builder.md)). |
+| `device.jl` | GPU placement and memory limit of the runners ([`storage_for`](@ref), [`set_memory_limit!`](@ref)). |
 | `inbuilt_methods.jl` | [`create_method`](@ref), [`get_master_method_dict`](@ref), [`generate_relax_params`](@ref). |
 | `SimulationFunctions/` | The pipelines [`run_direct_simulation`](@ref) and [`run_kinetic_simulation`](@ref). |
 | `time_integration.jl` | The time loop [`solve_equation`](@ref) and snapshot storage. |
-| `reference.jl` | [`analytical_solution`](@ref) and the [`analytic_closure`](@ref) interface. |
+| `Builder/reference.jl` | [`analytical_solution`](@ref) and the [`analytic_closure`](@ref) interface. |
 | `macros.jl` | [`@sim`](@ref), [`@plot`](@ref), [`@backup`](@ref). |
 | `Examples/` | Ready-to-run benchmarks: `euler_1d_sod`, `burgers_kinetic`, `advection_2d`. |

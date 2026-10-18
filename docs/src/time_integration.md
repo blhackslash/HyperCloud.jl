@@ -1,14 +1,18 @@
 # Time Integration
 
 [`solve_equation`](@ref) runs the time loop: it computes the step size, advances the particle
-grid with the chosen Runge–Kutta or IMEX stepper, reports progress, and stores snapshots.
+grid with the chosen Runge–Kutta or IMEX stepper (HyperCloudCore's
+[Time Stepper](@extref HyperCloudCore Time-Stepper)), applies particle adaptivity between steps if
+it is enabled, reports progress, and stores snapshots.
 
 ## Time step
 
 - **Fixed:** with `is_cfl = false`, `dt` is the physical time step.
 - **CFL:** with `is_cfl = true` (`:Time_CFL` in a configuration), `dt` is a CFL number and the
   physical step is recomputed every iteration as `dt * get_time_step(pg, eq, div_interp)`. This
-  uses the current wave speeds of the equation and the grid spacing.
+  uses the current wave speeds of the equation and the MLS derivative stencils of the grid; see
+  HyperCloudCore's [CFL time step](@extref HyperCloudCore CFL-time-step) for the formula and
+  measured limits.
 
 The last step is shortened so the run ends exactly at `tmax`.
 
@@ -35,7 +39,8 @@ to `false`.
 The runners take both settings from global switches: `enable_progress_bar!(false)` and
 `set_progress_interval!(seconds)`.
 
-The loop also logs the execution backend of the parallel loops (see `set_backend!`).
+The loop also logs the execution backend of the parallel loops (see
+[`set_backend!`](@extref HyperCloudCore HyperCloudCore.set_backend!)).
 
 ## Return value
 
