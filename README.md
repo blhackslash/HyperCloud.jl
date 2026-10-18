@@ -3,7 +3,8 @@
 [![DOI](https://zenodo.org/badge/23266176.svg)](https://doi.org/10.5281/zenodo.23266176)
 [![Build Status](https://github.com/blhackslash/HyperCloud.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/blhackslash/HyperCloud.jl/actions/workflows/CI.yml)
 [![Coverage](https://codecov.io/gh/blhackslash/HyperCloud.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/blhackslash/HyperCloud.jl)
-[![Stable Docs](https://img.shields.io/badge/docs-dev-blue.svg)](https://blhackslash.github.io/HyperCloud.jl/dev/)
+[![Dev Docs](https://img.shields.io/badge/docs-dev-blue.svg)](https://blhackslash.github.io/HyperCloud.jl/dev/)
+[![Stable Docs](https://img.shields.io/badge/docs-stable-blue.svg)](https://blhackslash.github.io/HyperCloud.jl/stable/)
 
 **HyperCloud.jl** is an advanced meshfree simulation framework designed to solve arbitrary hyperbolic conservation laws. Powered by a high-performance, physics-agnostic mathematical engine, HyperCloud provides a complete computational environment. It combines dynamic particle topologies with high-order spatial approximations—including moving-least-squares MUSCL reconstruction and Multi-Dimensional Optimal Order Detection (MOOD)—controlled entirely through a streamlined, macro-driven execution workflow.
 
