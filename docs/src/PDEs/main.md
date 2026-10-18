@@ -1,9 +1,11 @@
 # PDE Architecture & Exact Solutions
 
-Every equation is a struct subtyping `HyperbolicPDE{D, M, T}`, where `D` is the spatial
-dimension, `M` the number of variables and `T` the floating-point type. The numerical schemes
-only access an equation through a small set of functions, so new physics plugs in without
-touching the solver.
+Every equation is a struct subtyping
+[`HyperbolicPDE{D, M, T}`](@extref HyperCloudCore HyperCloudCore.HyperbolicPDE), where `D` is the
+spatial dimension, `M` the number of variables and `T` the floating-point type. The numerical
+schemes only access an equation through a small set of functions, so new physics plugs in without
+touching the solver. The full contract, including which scheme needs which method, is
+HyperCloudCore's [API Contracts](@extref HyperCloudCore A-new-PDE-(HyperbolicPDE{D,-M,-T})).
 
 ## Equation interface
 
@@ -12,9 +14,16 @@ touching the solver.
 | `flux(eq, U)` | yes | `Flux{D, M, T}`: the physical flux ``F_d(U)`` for every direction `d`. |
 | `max_eigenvalue(eq, U, d)` | yes | Largest absolute wave speed in direction `d` (used for the CFL step and Rusanov flux). |
 | `prim2cons(eq, V)`, `cons2prim(eq, U)` | yes | Conversion between primitive and conservative variables (identity for scalar laws). |
-| `velocity(eq, U, d)` | upwind schemes | Flux Jacobian ``\partial F_d / \partial U`` as an `M × M` static matrix. |
+| `velocity(eq, U, d)` | upwind schemes, WENO, `UpwindFlux` | Flux Jacobian ``\partial F_d / \partial U`` as an `M × M` static matrix. |
+| `fluid_velocity(eq, U)` | Lagrangian grid movers | Velocity the particles move with, a `Space{D, T}`. |
+| `is_admissible(eq, U)` | optional | Physical admissibility for MOOD (default: all components finite). |
+| `max_eigenvalue(eq, U, d, shift)` | optional | Exact relative wave speed on moving grids. |
 | `kinetic_wave_speed(eq, d, k)` | kinetic systems | Speed of kinetic variable `k` in direction `d`. |
 | `analytic_closure(eq, ic, geom)` | optional | Exact solution, see below. |
+
+The functions run inside the time step, on a GPU as device code, so they have to follow
+HyperCloudCore's [rules for kernel bodies](@extref HyperCloudCore Rules-for-kernel-bodies).
+Import them from HyperCloudCore before adding methods (`import HyperCloudCore: flux, max_eigenvalue`).
 
 A builder method makes the equation available from configurations:
 

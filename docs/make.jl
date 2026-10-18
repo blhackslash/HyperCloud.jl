@@ -1,8 +1,22 @@
 using Documenter
+using DocumenterInterLinks
 using HyperCloud
+
+# Cross-references into the numerical core, e.g. [`reserve!`](@extref HyperCloudCore).
+# HYPERCLOUDCORE_INVENTORY overrides the inventory, e.g. with a local HyperCloudCore.jl/docs/build/objects.inv
+# to check references to names that are not deployed yet.
+links = InterLinks(
+    "HyperCloudCore" => (
+        "https://blhackslash.github.io/HyperCloudCore.jl/dev/",
+        get(ENV, "HYPERCLOUDCORE_INVENTORY", "https://blhackslash.github.io/HyperCloudCore.jl/dev/objects.inv"),
+    ),
+)
 
 makedocs(;
     modules=[HyperCloud],
+    # Explicit, so the build does not depend on the `origin` remote (Forgejo checkouts).
+    repo=Remotes.GitHub("blhackslash", "HyperCloud.jl"),
+    plugins=[links],
     authors="Pascal Jung",
     sitename="HyperCloud.jl",
     checkdocs = :exports,

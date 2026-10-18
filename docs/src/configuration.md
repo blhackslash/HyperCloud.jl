@@ -2,7 +2,10 @@
 
 A simulation is described by one flat `Dict{Symbol, Any}`. Keys are grouped into namespaces
 by prefix: `:Grid_Ns` belongs to the `Grid` namespace and reaches the builder as `:Ns`
-(see `extract_namespace`). Keys without a prefix are global.
+(see [`extract_namespace`](@ref)). Keys without a prefix are global.
+
+Most namespaces configure numerical components of HyperCloudCore; their builders and defaults
+are documented in HyperCloudCore's [Config-Driven Builders](@extref HyperCloudCore Config-Driven-Builders).
 
 A method dictionary (for example from [`create_method`](@ref)) is merged on top of the shared
 parameters, so any key below may appear in either place.
@@ -28,8 +31,9 @@ parameters, so any key below may appear in either place.
 | `:velocities` | `:linear` | One entry per dimension describing ``A_d``; see [Linear Advection](PDEs/advection.md). |
 | `:gamma` | `:euler` | Ratio of specific heats. |
 
-The Euler representation is read from the same namespace by `parse_representation`
-(default: conservative).
+The Euler representation is read from the same namespace by `parse_representation`:
+`:representation` is `:conservative` (default), `:primitive` or `:lagrangian`, the latter two with
+an integration `:path` (default `:mapped`).
 
 ## `Grid_` — domain and particles
 
@@ -38,10 +42,12 @@ The Euler representation is read from the same namespace by `parse_representatio
 | `:domain` | — | `:rectangular`, `:spherical`, or a pre-built `GeometricDomain`. Required. |
 | `:mins`, `:maxs` | — | Bounding box (tuples of length `D`). A spherical domain uses their midpoint as center and half the first extent as radius. |
 | `:periodic` | `false` | `Bool` or `NTuple{D, Bool}`. |
-| `:bc` | none | Boundary conditions: `Dict(tag => bc)` where `bc` is an `AbstractBoundaryCondition`, `:outflow`, `:fixed_dirichlet`, or the name of a zero-argument constructor (looked up in `Main`, then in HyperCloud). A string is parsed as Julia code. |
+| `:bc` | none | Boundary conditions: `Dict(tag => bc)` where `bc` is an `AbstractBoundaryCondition`, `:outflow`, `:fixed_dirichlet`, or the name of a zero-argument constructor (looked up in HyperCloudCore, then in `Main`; see [`parse_bc`](@extref HyperCloudCore HyperCloudCore.parse_bc)). A string is parsed as Julia code. |
 | `:Ns` | — | Particles per direction (tuple). The nominal spacing is `(maxs - mins) ./ Ns`. |
 | `:randomness_factor` | — | Jitter per direction as a fraction of the spacing (tuple). |
-| `:seed` | — | RNG seed for the jitter. Ignored (fixed to 42) when all jitter is zero. |
+| `:seed` | `42` | RNG seed for the jitter. |
+| `:mover` | `:none` | Grid motion: `:none`, `:lagrangian`, `:scaled_lagrangian` (factor `:mover_alpha`) or `:sinusoidal` (amplitude `:mover_amplitude`); see [Moving Grids](@extref HyperCloudCore Moving-Grids-(ALE)). Lagrangian movers need `fluid_velocity` for the equation; all built-in equations define it. |
+| `:volumes` | `:shepard` | Particle volume estimator: `:shepard` (`:volumes_sweeps`) or `:mls` (`:volumes_degree`, `:volumes_samples_per_dx`); see [Particle Volumes](@extref HyperCloudCore Particle-Volumes-and-Adaptivity). |
 
 !!! warning "The key is `:Grid_bc`"
     Boundary conditions are read from `:Grid_bc`. A key such as `:Grid_bc_map` is silently ignored.
@@ -75,9 +81,13 @@ variables ``(\rho, \rho\vec u, E)``.
 | Key | Default | Meaning |
 |:----|:--------|:--------|
 | `:name` | — | `:MUSCL`, `:Upwind`, `:Central` or `:WENO`. Required. |
-| `:order` | — | Formal order of the reconstruction. `:Upwind` only supports `1`. |
-| `:MLS_order` | `0` | Order of the MLS divergence operator. |
-| `:upwind_alg_nd` | — | `:Upwind` only: multi-dimensional upwind algorithm, e.g. `:Classic`. |
+| `:order` | — | Consistency order (expected convergence rate; MUSCL reconstructs with degree `order - 1`). `:Upwind` only supports `1`, `:WENO` needs at least `2`. |
+| `:MLS_order` | `0` | Fixed order of the MLS divergence operator; `0` follows each particle's current order. |
+| `:upwind_alg_nd` | — | `:Upwind` only: `:Classic` (any system), `:Tiwari` (scalar) or `:Praveen` (scalar, 2D). |
+
+The schemes are described in HyperCloudCore: [MUSCL](@extref HyperCloudCore MUSCL-Reconstruction-and-Limiting),
+[Upwind](@extref HyperCloudCore Upwind-Divergence), [Central](@extref HyperCloudCore Central-Divergence) and
+[WENO](@extref HyperCloudCore Meshfree-WENO) (scalar equations only).
 
 ## `Flux_`, `Limiter_`, `MOOD_`
 
@@ -90,16 +100,39 @@ variables ``(\rho, \rho\vec u, E)``.
 | `:MOOD_strategy` | `:none` | `:EPD0`, `:SEPD0`, `:EPD1`, `:EPD2`. Required when a criterion is set. |
 | `:MOOD_delta_relax` | — | Required by `:U1`/`:U2`. Multiplied by the cell volume `prod(dx)`. |
 
+See HyperCloudCore's [Numerical Flux Functions](@extref HyperCloudCore Numerical-Flux-Functions), the
+[limiters](@extref HyperCloudCore Slope-limiting-(*a-priori*)) and
+[MOOD](@extref HyperCloudCore Multi-Dimensional-Optimal-Order-Detection-(MOOD)) for what the options do.
+
 ## `Time_` — time stepping
 
 | Key | Meaning |
 |:----|:--------|
-| `:stepper` | Explicit: `:Euler`, `:RK2` (Ralston), `:RK3` (SSP), `:RK4` (classical). IMEX: `:IMEXEuler`, `:ARS222`, `:ARS233`, `:PRSSP3`, `:SSP332`. |
-| `:CFL` | CFL number; the step is recomputed every iteration. |
+| `:stepper` | Explicit: `:Euler`, `:RK2` (SSP), `:RK2Ralston`, `:RK3` (SSP), `:RK4` (classical). IMEX: `:IMEXEuler`, `:ARS222`, `:ARS233`, `:PRSSP3`, `:SSP332`. |
+| `:CFL` | CFL number; the step is recomputed every iteration. It is not a classical Courant number, see [what the CFL number means on a point cloud](@extref HyperCloudCore What-the-CFL-number-means-on-a-point-cloud). |
 | `:dt` | Fixed time step, used when `:CFL` is absent. |
 | `:tmax` | Optional override of the global `:tmax`. |
+| `:reset_orders_per_stage` | `true` restores the maximum order before every stage (default `false`: orders lowered by MOOD stay lowered for the step). |
+| `:full_search_per_stage` | `true` rebuilds the neighbour lists at every stage of a moving grid (default `false`). |
 
-IMEX steppers treat the source terms implicitly and are used with the kinetic pipeline.
+IMEX steppers treat the source terms implicitly and are used with the kinetic pipeline. See
+HyperCloudCore's [Butcher Tableaus](@extref HyperCloudCore Butcher-Tableaus) for the properties of each
+tableau.
+
+## `Adapt_` — particle insertion and merging
+
+Optional; mainly for Lagrangian grids. See
+[Particle insertion and merging](@extref HyperCloudCore Particle-insertion-and-merging).
+
+| Key | Default | Meaning |
+|:----|:--------|:--------|
+| `:enabled` | `false` | Insert and merge particles between time steps. |
+| `:max_gap`, `:min_gap` | `1.6`, `0.5` | Pair distances (in units of the spacing) above which a particle is inserted and below which a pair is merged. |
+| `:clearance` | `0.7` | Free radius required around an insertion point. |
+| `:samples_per_dx` | `2` | Lattice resolution of the conservative remap. |
+| `:exclude_reduced_order` | `true` | No events near particles whose MOOD order was lowered. |
+
+The number of particles at the end is stored in the statistic `final_particle_count`.
 
 ## `Kinetic_` — relaxation system
 

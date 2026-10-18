@@ -17,6 +17,8 @@ In a configuration: `:PDE_name => :burgers, :PDE_D => D`.
 - **Flux.** ``F_d(u) = u^2/2`` in every direction.
 - **Wave speed.** `max_eigenvalue` returns ``|u|``; `velocity` returns the ``1 \times 1``
   Jacobian ``u``.
+- **Moving grids.** `fluid_velocity` returns ``(u, \dots, u)``, the characteristic velocity, so a
+  Lagrangian grid follows the characteristics.
 
 ## Exact solutions
 
