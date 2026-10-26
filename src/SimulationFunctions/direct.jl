@@ -5,9 +5,11 @@ export run_direct_simulation
     run_direct_simulation(params::ParamDict) -> Union{AbstractSimData, Nothing}
 
 Orchestrates the standard execution pipeline for explicit macroscopic PDEs. 
-Extracts configuration namespaces, builds the mathematical equation system, continuous domain, and particle grid, and instantiates the spatial numerical schemes. Applies the initial condition directly to the particle grid and executes the main solver loop, packaging the raw conservative state vectors into an `AbstractSimData` object.
+Extracts configuration namespaces, builds the mathematical equation system, continuous domain, and particle grid, and instantiates the spatial numerical schemes. Applies the initial condition directly to the particle grid and executes the main solver loop, packaging the raw conservative state vectors into an `AbstractSimData` object. BGK configurations
+(`:PDE_name => :bgk`) are handed to [`run_bgk_simulation`](@ref), which attaches their collision term.
 """
 function run_direct_simulation(params::ParamDict)::Union{AbstractSimData, Nothing}
+    _is_bgk(params) && return run_bgk_simulation(params)   # BGK brings its own collision term
     T = get(params, :T, Float64) 
     
     try
