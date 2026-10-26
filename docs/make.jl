@@ -39,6 +39,7 @@ makedocs(;
             "Linear Advection" => "PDEs/advection.md",
             "Burgers" => "PDEs/burgers.md",
             "Euler" => "PDEs/euler.md",
+            "BGK" => "PDEs/bgk.md",
         ],
         "Source Terms" => [
             "Kinetic Relaxation" => "SourceTerms/kinetic.md",

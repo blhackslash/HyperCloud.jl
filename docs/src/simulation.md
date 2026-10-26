@@ -1,8 +1,9 @@
 # Simulation Engine
 
 The runners turn a flat parameter dictionary into a complete solver, run it, and package the
-result. There are two: [`run_direct_simulation`](@ref) for the PDE itself and
-[`run_kinetic_simulation`](@ref) for its kinetic relaxation approximation.
+result: [`run_direct_simulation`](@ref) for the PDE itself, [`run_kinetic_simulation`](@ref) for its
+kinetic relaxation approximation, and [`run_bgk_simulation`](@ref) for the discrete-velocity
+[BGK model](PDEs/bgk.md).
 
 ## Pipeline
 
@@ -115,6 +116,18 @@ linear kinetic system with ``N_K`` variables plus a stiff relaxation term (see
   (Maxwellian) at every particle.
 - **Output.** Snapshots are summed back to the macroscopic variables with the source term's
   `Kin2Macro` map. Set `:save_relax => true` to keep the raw kinetic variables instead.
+
+## BGK simulation
+
+[`run_bgk_simulation`](@ref) runs the [BGK equation](PDEs/bgk.md) (`:PDE_name => :bgk`). The direct
+and kinetic runners hand BGK configurations over to it, so the method dictionaries work unchanged.
+
+- **Macroscopic initial data.** The initial condition is built with `M = D + 2` (the Euler variables
+  of the same ``\gamma``) and every particle starts in the discrete Maxwellian of its state.
+- **Collision term.** [`BGKRelaxation`](@ref) (implicit) for an IMEX tableau,
+  [`ExplicitBGKRelaxation`](@ref) for an explicit one, none for `:PDE_tau => Inf`.
+- **Output.** Snapshots hold the moments ``(\rho, \rho\vec u, E)``; `:save_relax => true` keeps the
+  distributions.
 
 ## API
 
