@@ -94,19 +94,21 @@ one time step and the first (compiling) step:
 
 | D | M | particles | step / particle | first step | per-particle buffers | neighbour-slot buffers |
 |:--|--:|--:|--:|--:|--:|--:|
-| 1 | 16 | 4000 | 0.5 µs | 3 s | 1.9 KiB | 10 × 0.27 KiB |
-| 1 | 64 | 4000 | 2.7 µs | 6 s | 6.8 KiB | 10 × 1.0 KiB |
-| 1 | 128 | 4000 | 5.5 µs | 12 s | 13 KiB | 10 × 2.0 KiB |
-| 1 | 256 | 4000 | 13 µs | 32 s | 26 KiB | 10 × 4.0 KiB |
-| 2 | 16 | 64² | 3.7 µs | 6 s | 3.1 KiB | 36 × 0.41 KiB |
-| 2 | 64 | 64² | 12 µs | 16 s | 9.1 KiB | 36 × 1.5 KiB |
-| 2 | 144 | 64² | 37 µs | 43 s | 19 KiB | 36 × 3.4 KiB |
-| 2 | 256 | 64² | 77 µs | 106 s | 33 KiB | 36 × 6.0 KiB |
+| 1 | 16 | 4000 | 0.32 µs | 3 s | 1.9 KiB | 10 × 0.27 KiB |
+| 1 | 64 | 4000 | 1.6 µs | 5 s | 6.8 KiB | 10 × 1.0 KiB |
+| 1 | 128 | 4000 | 3.2 µs | 11 s | 13 KiB | 10 × 2.0 KiB |
+| 1 | 256 | 4000 | 7.1 µs | 30 s | 26 KiB | 10 × 4.0 KiB |
+| 2 | 16 | 64² | 2.4 µs | 5 s | 3.1 KiB | 36 × 0.41 KiB |
+| 2 | 64 | 64² | 5.8 µs | 15 s | 9.1 KiB | 36 × 1.5 KiB |
+| 2 | 144 | 64² | 16 µs | 40 s | 19 KiB | 36 × 3.4 KiB |
+| 2 | 256 | 64² | 30 µs | 95 s | 33 KiB | 36 × 6.0 KiB |
 
-In 1-D the cost grows linearly with ``M`` and a few hundred velocities are practical. In 2-D the
-per-slot buffers of the scheme (the flux differences of every neighbour, ``(D + 1) M`` values per
-slot) dominate the memory, about 6× the per-particle buffers, and compile time and cost grow faster
-than ``M``: about ``12 \times 12`` velocities are practical with the current schemes.
+The cost per particle grows linearly with ``M`` up to a few hundred equations. In 2-D the per-slot
+buffers of the scheme (the flux differences of every neighbour, ``(D + 1) M`` values per slot)
+dominate the memory, about 6× the per-particle buffers, and the compile time of the first step grows
+faster than ``M``; ``16 \times 16`` velocities still work (95 s to compile, 30 µs per particle and
+step). About a third of a step is the collision (two equilibria per stage), a third the gradient
+pre-pass with the limiter, and the rest the flux pass.
 
 ## API
 

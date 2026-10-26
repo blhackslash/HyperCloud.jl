@@ -163,11 +163,17 @@ num_velocities(::BGKEquation{D, M, T, NV1, NV}) where {D, M, T, NV1, NV} = NV
 
 @inline _has_h(::BGKEquation{D, M, T, NV1, NV}) where {D, M, T, NV1, NV} = M != NV
 
-# 1-D node index of discrete velocity `k` (state component `k`; the `h` components share the nodes of `f`).
-@inline function _node_index(::BGKEquation{D, M, T, NV1, NV}, k::Int, d::Int) where {D, M, T, NV1, NV}
-    kk = (k - 1) % NV
-    return (kk ÷ NV1^(d - 1)) % NV1 + 1
+# 1-D node index along `d` of state component `k` (the `h` components share the nodes of `f`), the first
+# axis running fastest.
+_node_index(NV1::Int, NV::Int, k::Int, d::Int) = ((k - 1) % NV) ÷ NV1^(d - 1) % NV1 + 1
+
+# The node indices of all components as a compile-time constant (a literal tuple): the index arithmetic
+# never runs in the kernels, a runtime `k` is a table load and a constant one folds away.
+@generated function _node_table(::BGKEquation{D, M, T, NV1, NV}) where {D, M, T, NV1, NV}
+    table = ntuple(k -> ntuple(d -> _node_index(NV1, NV, k, d), D), M)
+    return :($table)
 end
+@inline _node_index(eq::BGKEquation, k::Int, d::Int) = @inbounds _node_table(eq)[k][d]
 
 @inline _velocity_component(eq::BGKEquation, k::Int, d::Int) = @inbounds eq.center[d] + eq.nodes[_node_index(eq, k, d)]
 
@@ -183,9 +189,17 @@ nodes of `f`).
     return v, w
 end
 
-# Velocities of all state components along `d`.
-@inline _component_speeds(eq::BGKEquation{D, M, T}, d::Int) where {D, M, T} =
-    State{M, T}(ntuple(k -> _velocity_component(eq, k, d), Val(M)))
+# Velocities of all state components along axis `d`, unrolled with literal node indices.
+@generated function _component_speeds(eq::BGKEquation{D, M, T, NV1, NV}, ::Val{d}) where {D, M, T, NV1, NV, d}
+    terms = [:(eq.center[$d] + eq.nodes[$(_node_index(NV1, NV, k, d))]) for k in 1:M]
+    return :(@inbounds State{$M, $T}(($(terms...),)))
+end
+
+# `Flux{D, M, T}((g(speeds_1), …, g(speeds_D)))` with the speeds of every axis (`g(speeds, d)`), unrolled over D.
+@generated function _per_axis(g::G, eq::BGKEquation{D, M, T}) where {G, D, M, T}
+    terms = [:(g(_component_speeds(eq, Val($d)), $d)) for d in 1:D]
+    return :(Flux{$D, $M, $T}(($(terms...),)))
+end
 
 # =========================================================================
 # MOMENTS AND EQUILIBRIUM
@@ -368,9 +382,7 @@ euler_limit(eq::BGKEquation{D, M, T}) where {D, M, T} = EulerEquation(Val(D), T,
 # HYPERCLOUDCORE API
 # =========================================================================
 
-@inline function flux(eq::BGKEquation{D, M, T}, U::State{M, T}) where {D, M, T}
-    return Flux{D, M, T}(ntuple(d -> _component_speeds(eq, d) .* U, Val(D)))
-end
+@inline flux(eq::BGKEquation{D, M, T}, U::State{M, T}) where {D, M, T} = _per_axis((v, d) -> v .* U, eq)
 
 @inline max_eigenvalue(eq::BGKEquation, U::State, d::Int) = @inbounds eq.max_speed[d]
 
@@ -388,9 +400,9 @@ end
 # dominates the error near equilibrium). `UpwindFlux` and `AlignedRusanovFlux` fall back to this method.
 @inline function (::RusanovFlux)(f_L::Flux{D, M, T}, f_R::Flux{D, M, T}, F_L::Flux{D, M, T}, F_R::Flux{D, M, T},
                                  eq::BGKEquation{D, M, T}) where {D, M, T}
-    return Flux{D, M, T}(ntuple(Val(D)) do d
-        T(0.5) * (F_L[d] + F_R[d] - abs.(_component_speeds(eq, d)) .* (f_R[d] - f_L[d]))
-    end)
+    return _per_axis(eq) do v, d
+        T(0.5) * (F_L[d] + F_R[d] - abs.(v) .* (f_R[d] - f_L[d]))
+    end
 end
 
 # =========================================================================
