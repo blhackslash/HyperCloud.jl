@@ -53,7 +53,7 @@ an integration `:path` (default `:mapped`).
 | `:randomness_factor` | — | Jitter per direction as a fraction of the spacing (tuple). |
 | `:seed` | `42` | RNG seed for the jitter. |
 | `:mover` | `:none` | Grid motion: `:none`, `:lagrangian`, `:scaled_lagrangian` (factor `:mover_alpha`) or `:sinusoidal` (amplitude `:mover_amplitude`); see [Moving Grids](@extref HyperCloudCore Moving-Grids-(ALE)). Lagrangian movers need `fluid_velocity` for the equation; all built-in equations define it. |
-| `:volumes` | `:shepard` | Particle volume estimator: `:shepard` (`:volumes_sweeps`) or `:mls` (`:volumes_degree`, `:volumes_samples_per_dx`); see [Particle Volumes](@extref HyperCloudCore Particle-Volumes-and-Adaptivity). |
+| `:volumes` | `:shepard` | Particle volume estimator: `:shepard` (`:volumes_sweeps`) or `:mls` (`:volumes_degree`, `:volumes_samples_per_dx`); see [Particle Volumes](@extref HyperCloudCore Particle-Volumes-and-Adaptivity). Used for the initial volumes and, on a moving grid, for the re-estimation after every step and every adaptation call (HyperCloudCore ≥ 0.7.5; before, only the initial volumes). On a moving grid Shepard volumes give a resolution-independent bias in the discrete mass; `:mls` converges but costs about 3 (1-D) to 20 (2-D) time steps per re-estimation. |
 
 !!! warning "The key is `:Grid_bc`"
     Boundary conditions are read from `:Grid_bc`. A key such as `:Grid_bc_map` is silently ignored.
@@ -137,6 +137,12 @@ Optional; mainly for Lagrangian grids. See
 | `:clearance` | `0.7` | Free radius required around an insertion point. |
 | `:samples_per_dx` | `2` | Lattice resolution of the conservative remap. |
 | `:exclude_reduced_order` | `true` | No events near particles whose MOOD order was lowered. |
+| `:max_events` | unlimited | At most this many insertions/merges per call (HyperCloudCore ≥ 0.7.5). |
+
+Every adaptation call is exactly conservative with respect to `Σ V_i U_i`, also with several events per call
+and, on a moving grid, across the volume re-estimation that follows (HyperCloudCore ≥ 0.7.5; with 0.7.4 and
+earlier, calls with several events in 2-D/3-D and the next re-estimation were not, see
+[Particle insertion and merging](@extref HyperCloudCore Particle-insertion-and-merging)).
 
 The number of particles at the end is stored in the statistic `final_particle_count`.
 
