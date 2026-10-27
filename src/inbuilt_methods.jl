@@ -11,7 +11,7 @@ Automatically generates a method ParamDict using the strict namespace API,
 automatically assigns the correct simulation pipeline, and generates a standardized plot label.
 """
 function create_method(timestepper::Symbol, main_gradient::Symbol, order::Int;
-                       main_flux::Symbol = :Rusanov,
+                       main_flux::Symbol = :AlignedRusanov,
                        limiter::Symbol = :none,
                        limiter_mode::Symbol = :hard,
                        mood_criterion::Symbol = :none,
@@ -84,8 +84,8 @@ function get_master_method_dict()
         create_method(:Euler, :Upwind, 1, ignore=ignore_relax, Scheme_upwind_alg_nd=:Classic),
         create_method(:RK2, :Upwind, 1, ignore=ignore_relax, Scheme_upwind_alg_nd=:Classic),
         create_method(:IMEXEuler, :Upwind, 1, Scheme_upwind_alg_nd=:Classic), 
-        create_method(:ARS222, :Upwind, 1, Scheme_upwind_alg_nd=:Classic),
-        create_method(:ARS233, :Upwind, 1, Scheme_upwind_alg_nd=:Classic),
+        create_method(:SSP332, :Upwind, 1, Scheme_upwind_alg_nd=:Classic),
+        create_method(:PRSSP3, :Upwind, 1, Scheme_upwind_alg_nd=:Classic),
         create_method(:RK2, :WENO, 2, ignore=ignore_relax),
 
         # =====================================================================
@@ -102,28 +102,28 @@ function get_master_method_dict()
         create_method(:RK2, :MUSCL,  2, mood_criterion=:U2, mood_strategy=:EPD2, MOOD_delta_relax = 0., ignore=ignore_relax),
         create_method(:RK2, :MUSCL,  2, mood_criterion=:U2, mood_strategy=:SEPD0, MOOD_delta_relax = 0., ignore=ignore_relax),
         create_method(:RK2, :MUSCL,  2, mood_criterion=:U1, mood_strategy=:EPD1, MOOD_delta_relax = 0., ignore=ignore_relax),
-        create_method(:RK4, :MUSCL,  4, mood_criterion=:only, ignore=ignore_relax),
+        create_method(:RK4SSP, :MUSCL,  4, mood_criterion=:only, ignore=ignore_relax),
 
         # =====================================================================
         # 3. RELAXATION 2ND ORDER (ARS222) - KINETIC
         # =====================================================================
-        create_method(:ARS222, :MUSCL,  2),
-        create_method(:ARS222, :MUSCL,  2, limiter=:VK, limiter_mode=:hard),
-        create_method(:ARS222, :MUSCL,  2, limiter=:minmod, limiter_mode=:hard),
-        create_method(:ARS222, :MUSCL,  2, mood_criterion=:U2, mood_strategy=:EPD1, MOOD_delta_relax = 0.),
-        create_method(:ARS222, :MUSCL,  2, mood_criterion=:U2, mood_strategy=:EPD2, MOOD_delta_relax = 0.),
-        create_method(:ARS222, :MUSCL,  2, mood_criterion=:U2, mood_strategy=:SEPD0, MOOD_delta_relax = 0.),
-        create_method(:ARS222, :MUSCL,  2, mood_criterion=:U1, mood_strategy=:EPD1, MOOD_delta_relax = 0.),
+        create_method(:SSP332, :MUSCL,  2),
+        create_method(:SSP332, :MUSCL,  2, limiter=:VK, limiter_mode=:hard),
+        create_method(:SSP332, :MUSCL,  2, limiter=:minmod, limiter_mode=:hard),
+        create_method(:SSP332, :MUSCL,  2, mood_criterion=:U2, mood_strategy=:EPD1, MOOD_delta_relax = 0.),
+        create_method(:SSP332, :MUSCL,  2, mood_criterion=:U2, mood_strategy=:EPD2, MOOD_delta_relax = 0.),
+        create_method(:SSP332, :MUSCL,  2, mood_criterion=:U2, mood_strategy=:SEPD0, MOOD_delta_relax = 0.),
+        create_method(:SSP332, :MUSCL,  2, mood_criterion=:U1, mood_strategy=:EPD1, MOOD_delta_relax = 0.),
 
         # =====================================================================
         # 4. HIGH-ORDER (RK4 Direct / ARS233 Kinetic)
         # =====================================================================
-        (create_method(:RK4, :MUSCL, order, ignore=ignore_relax) for order in 2:5)...,
-        (create_method(:RK4, :MUSCL, order, limiter=:VK, limiter_mode=:hard, ignore=ignore_relax) for order in 2:5)...,
-        (create_method(:RK4, :MUSCL, order, mood_criterion=:U2, mood_strategy=:EPD1, MOOD_delta_relax = 0., ignore=ignore_relax) for order in 2:5)...,
-        (create_method(:RK4, :MUSCL, order, mood_criterion=:U2, mood_strategy=:EPD2, MOOD_delta_relax = 0., ignore=ignore_relax) for order in 2:5)...,
-        (create_method(:ARS233, :MUSCL, order, mood_criterion=:U2, mood_strategy=:EPD1, MOOD_delta_relax = 0., ) for order in 2:5)...,
-        (create_method(:RK4, :MUSCL, order, limiter=:minmod, limiter_mode=:hard, ignore=ignore_relax) for order in 2:5)...
+        (create_method(:RK4SSP, :MUSCL, order, ignore=ignore_relax) for order in 2:5)...,
+        (create_method(:RK4SSP, :MUSCL, order, limiter=:VK, limiter_mode=:hard, ignore=ignore_relax) for order in 2:5)...,
+        (create_method(:RK4SSP, :MUSCL, order, mood_criterion=:U2, mood_strategy=:EPD1, MOOD_delta_relax = 0., ignore=ignore_relax) for order in 2:5)...,
+        (create_method(:RK4SSP, :MUSCL, order, mood_criterion=:U2, mood_strategy=:EPD2, MOOD_delta_relax = 0., ignore=ignore_relax) for order in 2:5)...,
+        (create_method(:PRSSP3, :MUSCL, order, mood_criterion=:U2, mood_strategy=:EPD1, MOOD_delta_relax = 0., ) for order in 2:5)...,
+        (create_method(:RK4SSP, :MUSCL, order, limiter=:minmod, limiter_mode=:hard, ignore=ignore_relax) for order in 2:5)...
     ]
     
     return Dict(methods...)
