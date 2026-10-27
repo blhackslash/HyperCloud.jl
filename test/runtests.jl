@@ -153,6 +153,47 @@ function linear_2d_base(periodic::Bool)
     return d
 end
 
+"1D BGK model (γ = 3: one distribution, `M = Nv`) with a smooth periodic density/momentum/energy wave."
+bgk_wave_params(N; Nv = 16, tau = Inf, stepper = :RK3, order = 3, T = Float64) = Dict{Symbol, Any}(
+    :PDE_name => :bgk, :PDE_D => 1, :PDE_gamma => 3.0, :PDE_Nv => Nv, :PDE_vmax => 6.0, :PDE_tau => tau,
+    :sim_func_name => :run_bgk_simulation, :T => T,
+    :tmax => 0.2, :snapshots => 2,
+    :Grid_domain => :rectangular, :Grid_mins => (0.0,), :Grid_maxs => (1.0,), :Grid_Ns => (N,),
+    :Grid_periodic => true, :Grid_randomness_factor => (0.0,), :Grid_seed => 42, :Grid_mover => :none,
+    :Weight_name => :exponential, :Weight_alpha => 1.0, :Weight_range => 5.5,
+    :IC_name => :sine, :IC_a => (0.2, 0.1, 0.1), :IC_period => (1.0,), :IC_c_offset => (1.0, 0.0, 0.5),
+    :Time_CFL => 0.2, :Time_stepper => stepper,
+    :Scheme_name => :MUSCL, :Scheme_order => order, :Flux_name => :Rusanov, :Limiter_name => :none,
+    :MOOD_criterion => :none,
+)
+
+"Sod shock tube for the 1D BGK model with γ = 1.4 (Chu-reduced pair f, h: `M = 2 Nv`)."
+bgk_sod_params(N; Nv = 16, tau = 1e-5) = Dict{Symbol, Any}(
+    :PDE_name => :bgk, :PDE_D => 1, :PDE_gamma => 1.4, :PDE_Nv => Nv, :PDE_vmax => 6.0, :PDE_tau => tau,
+    :sim_func_name => :run_kinetic_simulation,                      # forwarded to run_bgk_simulation
+    :tmax => 0.2, :snapshots => 1,
+    :Grid_domain => :rectangular, :Grid_mins => (-0.5,), :Grid_maxs => (0.5,), :Grid_Ns => (N,),
+    :Grid_periodic => false, :Grid_bc => Dict{Int, AbstractBoundaryCondition}(1 => FixedDirichlet(), 2 => OutflowBC()),
+    :Grid_randomness_factor => (0.0,), :Grid_seed => 10, :Grid_mover => :none,
+    :Weight_name => :exponential, :Weight_alpha => 1.0, :Weight_range => 5.5,
+    :IC_name => :riemann, :IC_uL => (1.0, 0.0, 2.5), :IC_uR => (0.125, 0.0, 0.25), :IC_p0 => (0.0,), :IC_n => (1.0,),
+    :Time_CFL => 0.2, :Time_stepper => :ARS222,
+    :Scheme_name => :MUSCL, :Scheme_order => 2, :Flux_name => :Rusanov, :Limiter_name => :VK, :Limiter_mode => :hard,
+    :MOOD_criterion => :none,
+)
+
+"Mean density error of a BGK run against the exact Euler solution with the same γ (`(err, sim)`)."
+function euler_l1(params)
+    exact = euler_limit_solution(params)
+    sim = run_sim(params)
+    sim === nothing && return (NaN, nothing)
+    xs, us, t = sim.x[end], sim.u[end], sim.t[end]
+    return sum(i -> abs(exact(spacetime(xs[i], t))[1] - us[i][1]), eachindex(xs)) / length(xs), sim
+end
+
+"Totals Σ_i U_i of the stored macroscopic snapshots (equal volumes on a regular lattice)."
+totals(sim, snap) = sum(sim.u[snap])
+
 const IMEX_STEPPERS = (:ARS222, :ARS233, :IMEXEuler, :PRSSP3, :SSP332)
 
 # Master-dict entries that currently fail the sweep. They are reported as "Broken"
@@ -575,6 +616,176 @@ end
 end
 
 # -------------------------------------------------------------------------
+# 6b. BGK EQUATION
+# -------------------------------------------------------------------------
+@testset "BGK equation" begin
+    "Macroscopic state (ρ, ρu..., E) from density, velocity and temperature."
+    macro_state(eq, ρ, u, θ) = SVector(ρ, (ρ .* u)..., 0.5 * ρ * sum(abs2, u) + 0.5 * (HC.get_D(eq) + eq.K) * ρ * θ)
+
+    @testset "Velocity grids" begin
+        v, w = velocity_grid(:uniform, 8, 4.0)
+        @test v ≈ -v[end:-1:1]
+        @test all(≈(1.0), w) && sum(w) ≈ 8.0
+        @test v[1] ≈ -3.5 && v[end] ≈ 3.5
+        # Gauss–Hermite: exact for polynomials times the Gaussian of the grid's scale
+        Nv = 10
+        x, W = velocity_grid(:gauss_hermite, Nv, 1.0)
+        @test maximum(abs, x) ≈ 1.0
+        σ = 1 / maximum(eigvals(SymTridiagonal(zeros(Nv), [sqrt(j / 2) for j in 1:(Nv - 1)])))   # node scale
+        for n in 0:(Nv - 1)
+            exact = sqrt(π) * σ^(2n + 1) * prod(1.0:2:(2n - 1); init = 1.0) / 2.0^n
+            @test sum(W .* exp.(-(x ./ σ) .^ 2) .* x .^ (2n)) ≈ exact rtol = 1e-12
+        end
+        @test eltype(velocity_grid(:gauss_hermite, 6, 3.0, Float32)[1]) == Float32
+        @test_throws ArgumentError velocity_grid(:uniform, 1, 1.0)
+        @test_throws ArgumentError velocity_grid(:uniform, 8, -1.0)
+        @test_throws ArgumentError velocity_grid(:chebyshev, 8, 1.0)
+    end
+
+    @testset "Construction: γ fixes the internal degrees of freedom" begin
+        nodes, w = velocity_grid(:uniform, 6, 5.0)
+        for (D, γ, K, M) in ((1, 3.0, 0, 6), (1, 1.4, 4, 12), (1, 5 / 3, 2, 12), (2, 2.0, 0, 36), (2, 1.4, 3, 72), (3, 5 / 3, 0, 216))
+            eq = BGKEquation(Val(D), nodes, w, γ, ConstantRelaxationTime(1.0))
+            @test eq.K ≈ K
+            @test HC.get_M(eq) == M
+            @test num_velocities(eq) == 6^D
+            @test eq.gamma ≈ γ
+            @test euler_limit(eq).gamma ≈ γ
+            @test HC.max_eigenvalue(eq, zero(State{M, Float64}), 1) ≈ 5 * 5 / 6   # outermost midpoint node
+        end
+        @test_throws ArgumentError BGKEquation(Val(1), nodes, w, 4.0, ConstantRelaxationTime(1.0))
+        eqc = BGKEquation(Val(2), nodes, w, 2.0, ConstantRelaxationTime(1.0); center = (1.0, 0.0))
+        @test eqc.max_speed ≈ [1 + 5 * 5 / 6, 5 * 5 / 6]
+        v, wk = velocity_node(eqc, 8)                                 # node (2, 2) of the 6×6 grid
+        @test v ≈ [1.0 + nodes[2], nodes[2]] && wk ≈ w[2]^2
+    end
+
+    @testset "build_equation(:bgk) ($T)" for T in (Float32, Float64)
+        ctx = Dict{Symbol, Any}(:T => T)
+        conf = Dict{Symbol, Any}(:name => :bgk, :D => 1, :Nv => 16, :vmax => 6.0, :gamma => 1.4, :tau => 1e-3)
+        eq = build_equation(conf, ctx)
+        @test eq isa BGKEquation{1, 32, T}
+        @test eq.relaxation == ConstantRelaxationTime{T}(T(1e-3))
+        eqv = build_equation(merge(delete!(copy(conf), :tau), Dict(:viscosity => 1e-2, :omega => 0.81)), ctx)
+        @test eqv.relaxation isa ViscosityRelaxationTime{T}
+        @test relaxation_time(eqv.relaxation, T(2), T(1.5)) ≈ T(1e-2 * 1.5^(0.81 - 1) / 2)
+        eqg = build_equation(merge(conf, Dict(:velocity_grid => :gauss_hermite, :gamma => 3.0)), ctx)
+        @test HC.get_M(eqg) == 16 && maximum(abs, eqg.nodes) ≈ 6
+        @test HC.get_M(build_equation(delete!(copy(conf), :gamma), ctx)) == 16   # default γ = (D + 2) / D
+        @test_throws ErrorException build_equation(delete!(copy(conf), :tau), ctx)
+        @test_throws ErrorException build_equation(merge(conf, Dict(:viscosity => 1.0)), ctx)
+    end
+
+    @testset "Conservative discrete Maxwellian (D = $D, γ = $γ, $kind, $T)" for (D, γ, Nv, kind) in
+            ((1, 3.0, 24, :uniform), (1, 1.4, 16, :uniform), (1, 5 / 3, 12, :gauss_hermite), (2, 2.0, 10, :uniform), (2, 1.4, 8, :gauss_hermite)),
+            T in (Float32, Float64)
+        nodes, w = velocity_grid(kind, Nv, 6.0, T)
+        eq = BGKEquation(Val(D), nodes, w, γ, ConstantRelaxationTime(T(1e-2)))
+        tol = T == Float64 ? 1e-11 : 1e-4
+        for (ρ, u, θ) in ((1.0, ntuple(_ -> 0.0, D), 1.0), (0.125, ntuple(d -> 0.3 * d, D), 0.8), (2.0, ntuple(d -> -0.5, D), 0.4))
+            U = SVector{D + 2, T}(macro_state(eq, ρ, u, θ))
+            f, ok = equilibrium(eq, U)
+            @test ok
+            @test f isa State{HC.get_M(eq), T}
+            @test isapprox(moments(eq, f), U; rtol = tol)
+            @test all(>(0), f)
+            @test is_admissible(eq, f)
+            @test HC.fluid_velocity(eq, f) ≈ SVector{D, T}(u) atol = 10tol
+            @test relaxation_time(eq, U) == T(1e-2)
+        end
+        # On a grid that resolves it, the discrete equilibrium is the continuous Maxwellian at the nodes
+        if kind === :uniform && D == 1
+            U = SVector{3, T}(macro_state(eq, 1.0, (0.2,), 1.0))
+            f, _ = equilibrium(eq, U)
+            vs = [velocity_node(eq, k)[1][1] for k in 1:Nv]
+            G = @. exp(-(vs - 0.2)^2 / 2) / sqrt(2π)
+            @test isapprox(f[1:Nv], G; atol = T == Float64 ? 1e-7 : 1e-5)
+            eq.K > 0 && @test isapprox(f[(Nv + 1):(2Nv)], 0.5 * eq.K .* f[1:Nv]; rtol = 1e-5)
+        end
+        # Non-physical states are reported, not solved
+        @test !equilibrium(eq, SVector{D + 2, T}(macro_state(eq, -1.0, ntuple(_ -> 0.0, D), 1.0)))[2]
+        @test !equilibrium(eq, SVector{D + 2, T}(macro_state(eq, 1.0, ntuple(_ -> 0.0, D), -1.0)))[2]
+        @test !equilibrium(eq, SVector{D + 2, T}(ntuple(_ -> T(NaN), D + 2)))[2]
+    end
+
+    @testset "Collision term" begin
+        nodes, w = velocity_grid(:uniform, 16, 6.0)
+        eq = BGKEquation(Val(1), nodes, w, 1.4, ConstantRelaxationTime(1e-2))
+        M  = HC.get_M(eq)
+        imp, expl = BGKRelaxation(eq), ExplicitBGKRelaxation(eq)
+        pg, _ = test_grid((0.0,), (1.0,), (4,); M = M)
+        feq, _ = equilibrium(eq, SVector(1.0, 0.3, 2.0))
+        δ = State{M, Float64}(ntuple(k -> 0.01 * sin(k), M))
+        f = feq + δ
+        Uf = moments(eq, f)
+        Mf, _ = equilibrium(eq, Uf)
+
+        @test norm(HC.evaluate_source(imp, feq, 1, pg, 0.0)) < 1e-9
+        @test HC.implicit_solve(imp, feq, 0.1, 1, pg, 0.0) ≈ feq
+        S = HC.evaluate_source(imp, f, 1, pg, 0.0)
+        @test S ≈ (Mf - f) / 1e-2
+        @test HC.evaluate_source(expl, f, 1, pg, 0.0) == S
+        @test norm(moments(eq, S)) < 1e-9 * norm(Uf) / 1e-2              # mass, momentum and energy conserved
+        # The implicit solve is the exact solution of f_new = f + Δt S(f_new)
+        Δt = 0.05
+        fn = HC.implicit_solve(imp, f, Δt, 1, pg, 0.0)
+        @test fn ≈ f + Δt * HC.evaluate_source(imp, fn, 1, pg, 0.0)
+        @test moments(eq, fn) ≈ Uf
+        @test HC.implicit_solve(imp, f, 1e8, 1, pg, 0.0) ≈ Mf                # stiff limit: projection onto equilibrium
+        # A non-physical state is left alone
+        bad = -feq
+        @test HC.implicit_solve(imp, bad, Δt, 1, pg, 0.0) == bad
+        @test iszero(HC.evaluate_source(imp, bad, 1, pg, 0.0))
+        @test !is_admissible(eq, bad)
+        # Viscosity law: τ = μ_ref θ^(ω-1) / ρ
+        eqv = BGKEquation(Val(1), nodes, w, 1.4, ViscosityRelaxationTime(1e-3, 0.5))
+        ρ, θ = Uf[1], 2 * (Uf[3] - 0.5 * Uf[2]^2 / Uf[1]) / (5 * Uf[1])
+        @test relaxation_time(eqv, Uf) ≈ 1e-3 * θ^(-0.5) / ρ
+
+        # Source selection follows the tableau
+        @test HC.bgk_sources(eq, IMEX_ARS222_Tableau(Float64)) == ((), (BGKRelaxation(eq),))
+        @test HC.bgk_sources(eq, RK2_SSP_Tableau(Float64)) == ((ExplicitBGKRelaxation(eq),), ())
+        eq_free = BGKEquation(Val(1), nodes, w, 1.4, ConstantRelaxationTime(Inf))
+        @test HC.bgk_sources(eq_free, IMEX_ARS222_Tableau(Float64)) == ((), ())
+    end
+
+    @testset "Numerical flux is the exact upwind flux per velocity" begin
+        nodes, w = velocity_grid(:uniform, 6, 3.0)
+        for D in (1, 2)
+            eq = BGKEquation(Val(D), nodes, w, (D + 2) / D, ConstantRelaxationTime(1.0))
+            M = HC.get_M(eq)
+            fL = Flux{D, M, Float64}(ntuple(d -> State{M, Float64}(ntuple(k -> 1 + 0.1k + d, M)), D))
+            fR = Flux{D, M, Float64}(ntuple(d -> State{M, Float64}(ntuple(k -> 2 - 0.05k * d, M)), D))
+            FL = Flux{D, M, Float64}(ntuple(d -> HC.flux(eq, fL[d])[d], D))
+            FR = Flux{D, M, Float64}(ntuple(d -> HC.flux(eq, fR[d])[d], D))
+            exact = Flux{D, M, Float64}(ntuple(D) do d
+                State{M, Float64}(ntuple(M) do k
+                    v = velocity_node(eq, k)[1][d]
+                    max(v, 0) * fL[d][k] + min(v, 0) * fR[d][k]
+                end)
+            end)
+            for F in (RusanovFlux(), UpwindFlux(), AlignedRusanovFlux())
+                @test F(fL, fR, FL, FR, eq) ≈ exact
+            end
+            @test HC.flux(eq, fL[1])[D] ≈ [velocity_node(eq, k)[1][D] * fL[1][k] for k in 1:M]
+        end
+    end
+
+    @testset "Free transport closure" begin
+        nodes, w = velocity_grid(:uniform, 16, 6.0)
+        geom = test_domain((0.0,), (1.0,), true)
+        ic = Sine(State{3, Float64}(0.2, 0.1, 0.1), Space{1, Float64}(1.0), State{3, Float64}(1.0, 0.0, 0.5))
+        eq = BGKEquation(Val(1), nodes, w, 3.0, ConstantRelaxationTime(Inf))
+        exact = analytic_closure(eq, ic, geom)
+        @test all(x -> exact(SVector(x, 0.0)) ≈ ic(SVector(x)), (0.1, 0.37, 0.8))
+        @test exact(SVector(0.3, 0.25)) ≈ exact(SVector(1.3, 0.25))                     # periodic wrap
+        @test integrate(x -> exact(SVector(x, 0.25))[1], 0.0, 1.0; n = 2000) ≈ 1.0 rtol = 1e-10   # mass is transported
+        eq_coll = BGKEquation(Val(1), nodes, w, 3.0, ConstantRelaxationTime(1e-3))
+        @test_logs (:warn, r"No Analytical Solution") analytic_closure(eq_coll, ic, geom)
+    end
+end
+
+# -------------------------------------------------------------------------
 # 7. ANALYTICAL CLOSURES
 # -------------------------------------------------------------------------
 @testset "Analytical closures" begin
@@ -816,6 +1027,87 @@ end
 # 8. FULL SIMULATIONS
 # -------------------------------------------------------------------------
 @testset "Simulations" begin
+    @testset "BGK" begin
+        @testset "Collisionless transport converges at the scheme's order" begin
+            errs = [first(l1_error(bgk_wave_params(N))) for N in (50, 100)]
+            @test all(isfinite, errs)
+            @test errs[2] < 5e-5
+            @test log2(errs[1] / errs[2]) > 2.7                     # MUSCL3 / RK3 against the exact DVM solution
+        end
+
+        @testset "Euler limit: Sod at τ = 1e-5 (IMEX, forwarded by run_kinetic_simulation)" begin
+            err, sim = euler_l1(bgk_sod_params(200))
+            @test sim !== nothing
+            if sim !== nothing
+                us = sim.u[end]
+                @test length(us[1]) == 3                              # macroscopic output
+                @test err < 0.025                                     # the Euler scheme itself: about 0.016
+                @test minimum(u -> u[1], us) > 0
+                @test minimum(u -> 0.4 * (u[3] - 0.5 * u[2]^2 / u[1]), us) > 0
+            end
+            # A larger τ is further from the Euler solution (viscous, heat-conducting profiles)
+            err_far, _ = euler_l1(bgk_sod_params(200; tau = 1e-2))
+            @test err_far > 0.025
+        end
+
+        @testset "Mass, momentum and energy are conserved (periodic lattice, IMEX)" begin
+            sim = run_sim(bgk_wave_params(64; tau = 1e-2, stepper = :ARS222, order = 2))
+            @test sim !== nothing
+            sim !== nothing && @test isapprox(totals(sim, length(sim.u)), totals(sim, 1); rtol = 1e-12, atol = 1e-12)
+        end
+
+        @testset "Explicit collision (RK2) agrees with IMEX for a non-stiff τ" begin
+            pe = merge(bgk_wave_params(64; tau = 0.05, stepper = :RK2, order = 2), Dict{Symbol, Any}(:sim_func_name => :run_direct_simulation))
+            pi_ = bgk_wave_params(64; tau = 0.05, stepper = :ARS222, order = 2)
+            se, si = run_sim(pe), run_sim(pi_)
+            @test se !== nothing && si !== nothing
+            if se !== nothing && si !== nothing
+                @test maximum(i -> abs(se.u[end][i][1] - si.u[end][i][1]), eachindex(se.u[end])) < 1e-3
+                @test isapprox(totals(se, length(se.u)), totals(se, 1); rtol = 1e-12, atol = 1e-12)
+                # Relaxation damps the free-transport solution
+                ex = analytical_solution(merge(pe, Dict{Symbol, Any}(:PDE_tau => Inf)))
+                @test maximum(i -> abs(ex(spacetime(se.x[end][i], se.t[end]))[1] - se.u[end][i][1]), eachindex(se.x[end])) > 1e-3
+            end
+        end
+
+        @testset ":save_relax keeps the distributions" begin
+            p = bgk_wave_params(32; tau = 1e-2, stepper = :ARS222, order = 2)
+            s_mac, s_kin = run_sim(p), run_sim(merge(p, Dict{Symbol, Any}(:save_relax => true)))
+            @test s_mac !== nothing && s_kin !== nothing
+            if s_mac !== nothing && s_kin !== nothing
+                eq = build_equation(HC.extract_namespace(p, :PDE), Dict{Symbol, Any}(:T => Float64))
+                @test length(s_kin.u[end][1]) == HC.get_M(eq) == 16
+                @test all(i -> moments(eq, s_kin.u[end][i]) ≈ s_mac.u[end][i], eachindex(s_mac.u[end]))
+            end
+        end
+
+        @testset "Float32 end-to-end" begin
+            e64, _ = l1_error(bgk_wave_params(50))
+            e32, s32 = l1_error(bgk_wave_params(50; T = Float32))
+            @test s32 !== nothing
+            s32 !== nothing && @test eltype(s32.u[end][1]) == Float32
+            @test abs(e32 - e64) < 1e-4
+        end
+
+        @testset "2D: collisionless convergence and conservation" begin
+            p2 = Dict{Symbol, Any}(
+                :PDE_name => :bgk, :PDE_D => 2, :PDE_gamma => 2.0, :PDE_Nv => 6, :PDE_vmax => 4.0, :PDE_tau => Inf,
+                :sim_func_name => :run_bgk_simulation, :tmax => 0.1, :snapshots => 1,
+                :Grid_domain => :rectangular, :Grid_mins => (0.0, 0.0), :Grid_maxs => (1.0, 1.0),
+                :Grid_periodic => true, :Grid_randomness_factor => (0.0, 0.0), :Grid_seed => 42, :Grid_mover => :none,
+                :Weight_name => :exponential, :Weight_alpha => 1.0, :Weight_range => 2.5,
+                :IC_name => :sine, :IC_a => (0.2, 0.05, 0.05, 0.1), :IC_period => (1.0, 1.0), :IC_c_offset => (1.0, 0.0, 0.0, 0.5),
+                :Time_CFL => 0.2, :Time_stepper => :RK2,
+                :Scheme_name => :MUSCL, :Scheme_order => 2, :Flux_name => :Rusanov, :Limiter_name => :none, :MOOD_criterion => :none)
+            errs = [first(l1_error(merge(p2, Dict{Symbol, Any}(:Grid_Ns => (N, N))))) for N in (16, 32)]
+            @test all(isfinite, errs)
+            @test log2(errs[1] / errs[2]) > 1.5
+            sim = run_sim(merge(p2, Dict{Symbol, Any}(:Grid_Ns => (16, 16), :PDE_tau => 1e-2, :Time_stepper => :ARS222)))
+            @test sim !== nothing
+            sim !== nothing && @test isapprox(totals(sim, length(sim.u)), totals(sim, 1); rtol = 1e-12, atol = 1e-12)
+        end
+    end
+
 
     @testset "Initial conditions (2D linear advection)" begin
         cases = [
@@ -1027,6 +1319,7 @@ end
 @testset "Examples" begin
     @sim advection_2d
     @sim burgers_kinetic
+    @sim bgk_1d_sod
     if RUN_GUI_TESTS
         @plot euler_1d_sod
         reset_plotter!()

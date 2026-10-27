@@ -5,9 +5,11 @@ export  run_kinetic_simulation
     run_kinetic_simulation(params::ParamDict) -> Union{AbstractSimData, Nothing}
 
 Manages the execution pipeline for highly coupled kinetic relaxation systems. 
-Builds a two-tier equation architecture by first constructing the base macroscopic equation, then constructing the kinetic system and its associated `RelaxationSourceTerm`. Dynamically overwrites the execution context to operate in the higher `NK`-dimensional space during integration. Automatically collapses the `NK`-dimensional kinetic data back into the macroscopic state before returning the output, unless `save_relax` is set to true.
+Builds a two-tier equation architecture by first constructing the base macroscopic equation, then constructing the kinetic system and its associated `RelaxationSourceTerm`. Dynamically overwrites the execution context to operate in the higher `NK`-dimensional space during integration. Automatically collapses the `NK`-dimensional kinetic data back into the macroscopic state before returning the output, unless `save_relax` is set to true. BGK configurations (`:PDE_name => :bgk`), which are kinetic already,
+are handed to [`run_bgk_simulation`](@ref).
 """
 function run_kinetic_simulation(params::ParamDict)::Union{AbstractSimData, Nothing}
+    _is_bgk(params) && return run_bgk_simulation(params)   # BGK brings its own collision term
     T = get(params, :T, Float64) 
     
     try

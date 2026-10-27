@@ -1,7 +1,7 @@
 # Examples
 
-HyperCloud ships with benchmark configurations covering the three built-in equations and both
-simulation pipelines.
+HyperCloud ships with benchmark configurations covering the built-in equations and the simulation
+pipelines.
 
 ## Running an example
 
@@ -48,6 +48,19 @@ Compares a direct scheme with the kinetic relaxation formulation for Burgers' eq
   ``\epsilon = 10^{-6}``.
 - **Methods:** `RK2MUSCL2` (direct) and `ARS222MUSCL2` (kinetic, IMEX).
 - **Sweep:** grid seeds `10, 100, 1000, 10000`.
+
+### 1D BGK shock tube (`bgk_1d_sod`)
+
+The Sod problem for the discrete-velocity [BGK model](PDEs/bgk.md) with ``\gamma = 1.4``.
+
+- **Model:** 24 uniform velocity nodes on ``[-6, 6]`` and the Chu-reduced pair ``(f, h)``
+  (48 equations); the IC gives the Sod states as Euler variables.
+- **Grid:** as `euler_1d_sod` (330 jittered particles, Dirichlet left, outflow right, `tmax = 0.2`).
+- **Methods:** `ARS222MUSCL2_VK` and `ARS222MUSCL2_U2_EPD1` (implicit collision), the inactive explicit
+  `RK2MUSCL2_VK` (only stable for the larger ``\tau``), against the exact Euler solution
+  (`reference = :euler_limit_solution`).
+- **Sweep:** relaxation times ``\tau = 10^{-5}, 10^{-3}, 10^{-2}``: the hydrodynamic limit, then
+  increasingly viscous and heat-conducting profiles.
 
 ### 2D linear advection (`advection_2d`)
 

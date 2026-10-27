@@ -14,22 +14,28 @@ parameters, so any key below may appear in either place.
 
 | Key | Default | Meaning |
 |:----|:--------|:--------|
-| `:sim_func_name` | — | Pipeline to run: `:run_direct_simulation` or `:run_kinetic_simulation`. Set automatically by `create_method`. |
+| `:sim_func_name` | — | Pipeline to run: `:run_direct_simulation`, `:run_kinetic_simulation` or `:run_bgk_simulation`. Set automatically by `create_method`; BGK configurations (`:PDE_name => :bgk`) run [`run_bgk_simulation`](@ref) from either of the other two. |
 | `:tmax` | — | Final time. `:Time_tmax` overrides it. |
 | `:snapshots` | — | Number of output intervals; `snapshots + 1` states are stored, including `t = 0`. |
 | `:remove_ghosts` | `true` | Drop boundary/ghost particles from the stored snapshots. |
 | `:T` | `Float64` | Floating-point type of the simulation. |
 | `:real_type` | `Float64` | Floating-point type of the exact reference (`analytical_solution`). |
-| `:save_relax` | `false` | Kinetic runs only: store the raw kinetic variables instead of the macroscopic state. |
+| `:save_relax` | `false` | Kinetic and BGK runs only: store the raw kinetic variables (distributions) instead of the macroscopic state. |
 
 ## `PDE_` — equation
 
 | Key | Used by | Meaning |
 |:----|:--------|:--------|
-| `:name` | all | `:linear`, `:burgers` or `:euler`. Required. |
-| `:D` | `:burgers`, `:euler` | Spatial dimension. Linear advection infers `D` from `:velocities`. |
+| `:name` | all | `:linear`, `:burgers`, `:euler` or `:bgk`. Required. |
+| `:D` | `:burgers`, `:euler`, `:bgk` | Spatial dimension. Linear advection infers `D` from `:velocities`. |
 | `:velocities` | `:linear` | One entry per dimension describing ``A_d``; see [Linear Advection](PDEs/advection.md). |
-| `:gamma` | `:euler` | Ratio of specific heats. |
+| `:gamma` | `:euler`, `:bgk` | Ratio of specific heats (BGK default `(D + 2) / D`; it fixes the internal degrees of freedom, see [BGK](PDEs/bgk.md)). |
+| `:Nv` | `:bgk` | Velocity nodes per direction (`Nv^D` discrete velocities). |
+| `:vmax` | `:bgk` | Half-width of the velocity grid (outermost node for Gauss–Hermite). |
+| `:velocity_grid` | `:bgk` | `:uniform` (default) or `:gauss_hermite`. |
+| `:vcenter` | `:bgk` | Centre of the velocity grid per direction (default `0`). |
+| `:tau` | `:bgk` | Constant relaxation time; `Inf` is collisionless. |
+| `:viscosity`, `:omega` | `:bgk` | Instead of `:tau`: `τ = μ / p` with `μ = viscosity * θ^omega` (`omega` default `0.5`). |
 
 The Euler representation is read from the same namespace by `parse_representation`:
 `:representation` is `:conservative` (default), `:primitive` or `:lagrangian`, the latter two with

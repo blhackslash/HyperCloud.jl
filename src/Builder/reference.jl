@@ -1,4 +1,4 @@
-export analytic_closure, analytical_solution
+export analytic_closure, analytical_solution, euler_limit_solution
 
 """
     analytical_solution(shared_params::ParamDict)
@@ -26,7 +26,7 @@ function analytical_solution(shared_params::ParamDict)
     
     context[:Equation] = eq
     context[:D] = D
-    context[:M] = get_M(eq)
+    context[:M] = _ic_components(eq)
     
     # 2. Build the pure mathematical geometry (handles boundaries and periodicity)
     geom = build_domain(domain_conf, context)
@@ -39,6 +39,26 @@ function analytical_solution(shared_params::ParamDict)
     # (Notice how it no longer depends on the messy parameters dict)
     return analytic_closure(eq, IC, geom)
 end
+
+"""
+    euler_limit_solution(params::ParamDict)
+
+Reference for BGK runs (`:PDE_name => :bgk`) in the hydrodynamic limit `τ → 0`: the exact solution of
+the Euler equations with the same `:PDE_D`, `:PDE_gamma` (default `(D + 2) / D`, as for the BGK model),
+initial condition and domain, i.e. [`analytical_solution`](@ref) with `:PDE_name => :euler`. Pass it as the
+`reference` of a `SimulationConfig`; it accepts any parameter set with an Euler-compatible `PDE` namespace.
+"""
+function euler_limit_solution(params::ParamDict)
+    p = copy(params)
+    p[:PDE_name] = :euler
+    haskey(p, :PDE_gamma) || (p[:PDE_gamma] = (p[:PDE_D] + 2) / p[:PDE_D])
+    return analytical_solution(p)
+end
+
+# Components of the initial condition: the state itself, except for kinetic models whose initial data are
+# macroscopic (the BGK distribution starts in the Maxwellian of an Euler state).
+_ic_components(eq::HyperbolicPDE) = get_M(eq)
+_ic_components(eq::BGKEquation) = get_D(eq) + 2
 
 # ==============================================================================
 # PDE-SPECIFIC CLOSURE GENERATORS

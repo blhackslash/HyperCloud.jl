@@ -28,3 +28,4 @@ end
 
 include("direct.jl")
 include("kinetic.jl")
+include("bgk.jl")
