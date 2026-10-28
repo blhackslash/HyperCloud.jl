@@ -105,6 +105,8 @@ The schemes are described in HyperCloudCore: [MUSCL](@extref HyperCloudCore MUSC
 | `:MOOD_criterion` | `:none` | `:none`, `:only`, `:U1`, `:U2`. |
 | `:MOOD_strategy` | `:none` | `:EPD0`, `:SEPD0`, `:EPD1`, `:EPD2`. Required when a criterion is set. |
 | `:MOOD_delta_relax` | — | Required by `:U1`/`:U2`. Multiplied by the cell volume `prod(dx)`. |
+| `:MOOD_plateau` | `1e-3` | `:U2` only (HyperCloudCore ≥ 0.7.6): a component that varies across the stencil by less than this fraction of its global range is not checked. Keeps smooth far fields (e.g. a vortex tail) at full order; `0` turns it off. |
+| `:MOOD_curvature_ratio` | `0.5` | `:U2` only (HyperCloudCore ≥ 0.7.6): Diot's curvature-magnitude test, applied among the nearest neighbours; `0` turns it off. |
 
 See HyperCloudCore's [Numerical Flux Functions](@extref HyperCloudCore Numerical-Flux-Functions), the
 [limiters](@extref HyperCloudCore Slope-limiting-(*a-priori*)) and
