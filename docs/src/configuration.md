@@ -89,6 +89,7 @@ variables ``(\rho, \rho\vec u, E)``.
 | `:name` | — | `:MUSCL`, `:Upwind`, `:Central` or `:WENO`. Required. |
 | `:order` | — | Consistency order (expected convergence rate; MUSCL reconstructs with degree `order - 1`). `:Upwind` only supports `1`, `:WENO` needs at least `2`. |
 | `:MLS_order` | `0` | Fixed order of the MLS divergence operator; `0` follows each particle's current order. |
+| `:moment_correction` | `false` | `:MUSCL` with `:order => 1` only: adds a non-negative dissipation that cancels the first moment of the Rusanov dissipation, so the first-order scheme is consistent on irregular clouds (no wave lag). Ignored for higher orders. See HyperCloudCore's [moment-corrected first-order dissipation](@extref HyperCloudCore Moment-corrected-first-order-dissipation). |
 | `:upwind_alg_nd` | — | `:Upwind` only: `:Classic` (any system), `:Tiwari` (scalar) or `:Praveen` (scalar, 2D). |
 
 The schemes are described in HyperCloudCore: [MUSCL](@extref HyperCloudCore MUSCL-Reconstruction-and-Limiting),
