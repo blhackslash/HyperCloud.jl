@@ -51,7 +51,7 @@ function create_method(timestepper::Symbol, main_gradient::Symbol, order::Int;
         name = "$(timestepper)$(main_gradient)$(order)"
         
         mods = String[]
-        if main_flux != :Rusanov; push!(mods, string(main_flux)); end
+        if main_flux != :AlignedRusanov; push!(mods, string(main_flux)); end
         if limiter != :none; push!(mods, string(limiter)); end
         
         if mood_criterion != :none
