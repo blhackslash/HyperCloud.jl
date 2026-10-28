@@ -116,12 +116,13 @@ See HyperCloudCore's [Numerical Flux Functions](@extref HyperCloudCore Numerical
 
 | Key | Meaning |
 |:----|:--------|
-| `:stepper` | Explicit: `:Euler`, `:RK2` (SSP), `:RK2Ralston`, `:RK3` (SSP), `:RK4` (classical). IMEX: `:IMEXEuler`, `:ARS222`, `:ARS233`, `:PRSSP3`, `:SSP332`. |
+| `:stepper` | Explicit: `:Euler`, `:RK2` (SSP), `:RK2Ralston`, `:RK3` (SSP), `:RK4SSP` (SSPRK(5,4), Spiteri–Ruuth), `:RK4` (classical). IMEX: `:IMEXEuler`, `:ARS222`, `:ARS233`, `:PRSSP3`, `:SSP332`. |
 | `:CFL` | CFL number; the step is recomputed every iteration. It is not a classical Courant number, see [what the CFL number means on a point cloud](@extref HyperCloudCore What-the-CFL-number-means-on-a-point-cloud). |
 | `:dt` | Fixed time step, used when `:CFL` is absent. |
 | `:tmax` | Optional override of the global `:tmax`. |
 | `:reset_orders_per_stage` | `true` restores the maximum order before every stage (default `false`: orders lowered by MOOD stay lowered for the step). |
 | `:full_search_per_stage` | `true` rebuilds the neighbour lists at every stage of a moving grid (default `false`). |
+| `:mood_substeps` | `true` (default, HyperCloudCore ≥ 0.7.7): with an explicit SSP tableau MOOD checks the forward Euler substeps `Y + (Δt/C) K` of the canonical Shu–Osher form instead of the stage values, so the admissibility of every substep carries over to every stage and the result (also for `:RK4SSP`, whose final update reuses earlier substeps). `false` checks the stage values. |
 
 IMEX steppers treat the source terms implicitly and are used with the kinetic pipeline. See
 HyperCloudCore's [Butcher Tableaus](@extref HyperCloudCore Butcher-Tableaus) for the properties of each
