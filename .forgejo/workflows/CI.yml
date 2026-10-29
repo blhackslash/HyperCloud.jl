@@ -12,7 +12,7 @@ concurrency:
 jobs:
   test:
     name: Julia ${{ matrix.version }}
-    runs-on: docker
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -28,10 +28,13 @@ jobs:
         with:
           version: ${{ matrix.version }}
 
-      - uses: https://github.com/julia-actions/julia-buildpkg@v1
-        with:
-          ignore-no-cache: true
+      # 1. Install virtual display server for GLMakie headless testing
+      - name: Install Xvfb
+        run: sudo apt-get update && sudo apt-get install -y xvfb
 
+      - uses: https://github.com/julia-actions/julia-buildpkg@v1
+      
+      # 2. Wrap the runtest action in xvfb-run
       - uses: https://github.com/julia-actions/julia-runtest@v1
         with:
-          coverage: false
+          prefix: xvfb-run
